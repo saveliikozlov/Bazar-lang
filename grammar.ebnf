@@ -1,0 +1,241 @@
+(* Bazar («Базар») — grammar.
+
+   Notation: ISO/IEC 14977 EBNF.
+     "," concatenation          "|" alternative
+     [ ] optional (0 or 1)      { } repetition (0 or more)
+     ( ) grouping              "-" exception (left minus right)
+     ? ? special sequence, defined precisely by the enclosed description
+
+   The grammar has two layers.
+   1. The LEXICAL grammar below converts source bytes into keyword tokens,
+      IDENT, INTEGER, "(", ")", NEWLINE, and one EOF. Horizontal whitespace
+      and comments are skipped and never reach the parser.
+   2. The SYNTACTIC grammar above that layer operates on the resulting tokens.
+      A quoted Cyrillic word such as "зуб" denotes that exact keyword token.
+      Each word in a multiword phrase ("зуб", "даю"; "а", "нє"; "і", "ше")
+      is a separate token. Spaces and tabs may separate phrase words, but
+      NOT newlines: phrases, simple statements, and expressions each occupy
+      one physical line.
+
+   This describes exactly the constructs accepted by the parser. *)
+
+
+(* ===================================================================== *)
+(* SYNTACTIC GRAMMAR *)
+(* ===================================================================== *)
+
+(* A program is a possibly empty sequence of newline-separated statements.
+   Blank and comment-only lines produce extra NEWLINE tokens. Every statement
+   is followed by NEWLINE, except that the last top-level statement may end
+   directly at EOF (the final LF is optional). Statements cannot share a
+   line: each repetition below starts with NEWLINE. *)
+program = { NEWLINE },
+          [ statement, { NEWLINE, [ statement ] } ],
+          EOF ;
+
+statement = immutable_declaration
+          | mutable_declaration
+          | assignment
+          | print_statement
+          | exit_statement
+          | if_statement ;
+
+(* "зуб даю" declares an immutable variable. *)
+immutable_declaration = "зуб", "даю", IDENT, "тіпа", type, "це", expression ;
+
+(* "мутна тєма" declares a mutable variable. *)
+mutable_declaration = "мутна", "тєма", IDENT, "тіпа", type, "це", expression ;
+
+(* дрібняк = i32, крупняк = i64, базар = bool *)
+type = "дрібняк" | "крупняк" | "базар" ;
+
+(* "перевзувся" assigns to an existing variable. *)
+assignment = "перевзувся", IDENT, "тепер", expression ;
+
+(* "базарь" prints a value. *)
+print_statement = "базарь", expression ;
+
+(* "всьо розходимось" exits with an expression result. It is optional and
+   allowed wherever a statement is allowed. *)
+exit_statement = "всьо", "розходимось", expression ;
+
+(* "якшо реально" ... "отакої".
+   The condition ends its line; "а нє" and "отакої" each occupy a separate
+   line. Both branch bodies contain at least one statement. A single
+   "отакої" closes the ENTIRE condition, including its optional else branch.
+   Each nested condition has its own closer. Because the true literal is
+   also "реально", an always-true condition is "якшо реально реально". *)
+if_statement = "якшо", "реально", expression, NEWLINE,
+               block,
+               [ "а", "нє", NEWLINE, block ],
+               "отакої" ;
+
+(* A block is a nonempty sequence of statements. EVERY statement inside
+   a block, including nested if_statement, ends with NEWLINE. Blank and
+   comment-only lines may occur anywhere. A block ends when the parser sees
+   "а" or "отакої" at line start. Indentation is ignored as horizontal space. *)
+block = { NEWLINE },
+        statement, NEWLINE,
+        { NEWLINE | ( statement, NEWLINE ) } ;
+
+
+(* ---- Expressions: lowest to highest precedence ---- *)
+
+expression = or_expression ;
+
+(* "або" is logical OR, left-associative. *)
+or_expression = and_expression, { "або", and_expression } ;
+
+(* "і ше" is logical AND, left-associative, binding more tightly than "або". *)
+and_expression = comparison, { "і", "ше", comparison } ;
+
+(* Each expression level allows at most ONE comparison: "a менше b менше c"
+   is a syntax error. Parentheses introduce a new level, so
+   "(a рівно b) рівно реально" is valid. A standalone "нє" is NOT negation
+   and does not occur in expressions. *)
+comparison = additive, [ comparison_operator, additive ] ;
+
+(* рівно = "==", не рівно = "!=", більше = ">", менше = "<" *)
+comparison_operator = "рівно"
+                    | "не", "рівно"
+                    | "більше"
+                    | "менше" ;
+
+(* плюс = "+", мінус = "-"; left-associative. *)
+additive = multiplicative, { additive_operator, multiplicative } ;
+additive_operator = "плюс" | "мінус" ;
+
+(* на = "*", ділити на = "/"; left-associative. *)
+multiplicative = unary, { multiplicative_operator, unary } ;
+multiplicative_operator = "на" | "ділити", "на" ;
+
+(* Unary minus is right-associative: "мінус мінус x" means -(-x).
+   After an operand, "мінус" is the binary additive operator instead. *)
+unary = "мінус", unary
+      | primary ;
+
+primary = INTEGER
+        | boolean_literal
+        | IDENT
+        | "(", expression, ")" ;
+
+(* реально = true, гон = false *)
+boolean_literal = "реально" | "гон" ;
+
+
+(* ===================================================================== *)
+(* LEXICAL GRAMMAR *)
+(* ===================================================================== *)
+
+(* ---- Encoding ----
+   source_bytes = ? the entire input is valid UTF-8 according to RFC 3629
+     and Unicode table 3-7:
+       U+0000..U+007F     00..7F
+       U+0080..U+07FF     C2..DF 80..BF
+       U+0800..U+0FFF     E0     A0..BF 80..BF
+       U+1000..U+CFFF     E1..EC 80..BF 80..BF
+       U+D000..U+D7FF     ED     80..9F 80..BF
+       U+E000..U+FFFF     EE..EF 80..BF 80..BF
+       U+10000..U+3FFFF   F0     90..BF 80..BF 80..BF
+       U+40000..U+FFFFF   F1..F3 80..BF 80..BF 80..BF
+       U+100000..U+10FFFF F4     80..8F 80..BF 80..BF
+     Any other byte sequence is a lexical error, including isolated
+     continuation bytes, C0, C1, F5..FF, overlong forms, U+D800..U+DFFF
+     surrogates, values above U+10FFFF, and sequences truncated at EOF.
+     Validation covers the entire input, INCLUDING COMMENTS. Input must
+     not begin with byte order mark EF BB BF (U+FEFF). ? ;
+
+   Decoded scalars are divided into lexemes using longest match: *)
+
+lexical_input = { horizontal_space | comment | NEWLINE | lexeme }, EOF ;
+
+lexeme = keyword | IDENT | INTEGER | "(" | ")" ;
+
+(* ---- Separators ---- *)
+horizontal_space = SPACE | TAB ;
+SPACE   = ? byte 20 (U+0020) ? ;
+TAB     = ? byte 09 (U+0009) ? ;
+LF      = ? byte 0A (U+000A) ? ;
+CR      = ? byte 0D (U+000D) ? ;
+
+(* LF or CRLF; CRLF produces ONE NEWLINE token. CR not immediately
+   followed by LF is a lexical error, including inside comments. *)
+NEWLINE = LF | CR, LF ;
+
+(* EOF is emitted exactly once, after the final input byte. *)
+EOF = ? end of the input byte sequence ? ;
+
+(* ---- Comments ----
+   The complete word "чутки" IMMEDIATELY followed by ":" starts a comment
+   through line end. In "xчутки:", the word is "xчутки" and ":" is unexpected.
+   "чутки" without an immediately following colon ("чутки :" or "чутки це")
+   is a lexical error. The ending NEWLINE is NOT part of the comment. *)
+comment = "чутки", ":", { comment_char } ;
+comment_char = ? any Unicode scalar (valid UTF-8 as defined above),
+                 except U+000A LF and U+000D CR ? ;
+
+(* ---- Words: keywords and identifiers ----
+   Read the complete word before classification (longest match). Reserved
+   words never match prefixes: "дрібняк_2", "базарний", "наш", "зуби",
+   "якшоб", and "отакоїж" are identifiers. Matching is exact and case-sensitive:
+   "є" and "е", or "і" and "и", differ. There is no Unicode normalization.
+   Latin "a" and Cyrillic "а" are different characters.
+   An apostrophe joins two letters inside a word: "з'їзд", "мʼясо". It
+   cannot start or end a word, follow a digit or "_", or be doubled; such
+   an apostrophe is a lexical error at its position. *)
+word = word_start, { word_part } ;
+word_start = letter_run | "_" ;
+word_part = word_start | digit ;
+letter_run = letter, { apostrophe, letter } ;
+letter = latin_letter | cyrillic_letter | ukrainian_letter ;
+apostrophe = "'" | "ʼ" ;   (* U+0027 and U+02BC; U+2019 is not accepted *)
+
+latin_letter = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J"
+             | "K" | "L" | "M" | "N" | "O" | "P" | "Q" | "R" | "S" | "T"
+             | "U" | "V" | "W" | "X" | "Y" | "Z"
+             | "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j"
+             | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t"
+             | "u" | "v" | "w" | "x" | "y" | "z" ;
+
+(* U+0410..U+044F plus U+0401 Ё and U+0451 ё, retained from the previous version. *)
+cyrillic_letter = "А" | "Б" | "В" | "Г" | "Д" | "Е" | "Ё" | "Ж" | "З" | "И"
+                | "Й" | "К" | "Л" | "М" | "Н" | "О" | "П" | "Р" | "С" | "Т"
+                | "У" | "Ф" | "Х" | "Ц" | "Ч" | "Ш" | "Щ" | "Ъ" | "Ы" | "Ь"
+                | "Э" | "Ю" | "Я"
+                | "а" | "б" | "в" | "г" | "д" | "е" | "ё" | "ж" | "з" | "и"
+                | "й" | "к" | "л" | "м" | "н" | "о" | "п" | "р" | "с" | "т"
+                | "у" | "ф" | "х" | "ц" | "ч" | "ш" | "щ" | "ъ" | "ы" | "ь"
+                | "э" | "ю" | "я" ;
+
+(* Ukrainian letters outside А-Я/а-я: U+0406 І, U+0456 і, U+0407 Ї,
+   U+0457 ї, U+0404 Є, U+0454 є, U+0490 Ґ, U+0491 ґ. The apostrophe is not
+   a letter; it only joins letters, see apostrophe above. *)
+ukrainian_letter = "І" | "і" | "Ї" | "ї" | "Є" | "є" | "Ґ" | "ґ" ;
+
+digit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
+
+(* Each individual phrase word is reserved, including "а", "нє", "і", "ше".
+   "чутки" is also reserved but emits no token: it starts a comment or causes
+   an error. Former Russian keywords are no longer reserved; those matching
+   identifier rules are ordinary identifiers. *)
+keyword = "зуб" | "даю" | "мутна" | "тєма" | "тіпа" | "це"
+        | "дрібняк" | "крупняк" | "базар"
+        | "перевзувся" | "тепер" | "базарь" | "всьо" | "розходимось"
+        | "якшо" | "реально" | "а" | "нє" | "отакої"
+        | "гон" | "або" | "і" | "ше" | "рівно" | "не" | "більше" | "менше"
+        | "плюс" | "мінус" | "на" | "ділити" ;
+
+reserved_word = keyword | "чутки" ;
+
+IDENT = word - reserved_word ;
+
+(* Unsigned decimal digits; the sign is a separate "мінус" operator.
+   Leading zeros and arbitrary lengths are allowed. Literal 2147483648 is
+   lexically and syntactically valid; fitting its type is a semantic question.
+   INTEGER immediately followed by a letter or "_" causes a lexical error at its
+   first digit: "12abc", "12_3", "0x1F", "10L". *)
+INTEGER = digit, { digit } ;
+
+(* Any other character outside comments produces a lexical error, including
+   "+", "-", "=", ";", ":", '"', emoji, disallowed letters such as "é" or "Љ",
+   and control characters. *)

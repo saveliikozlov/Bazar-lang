@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Editors
+.idea/
+.vscode/
+
+# Private design notes, not part of the submission
+ignoreForGit/
+
+# VS Code extension dependencies, generated backend, builds, and caches
+vscode/node_modules/
+vscode/backend/
+vscode/dist/
+vscode/*.vsix
+vscode/.vscode-test/
