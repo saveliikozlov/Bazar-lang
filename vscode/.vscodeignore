@@ -1,0 +1,10 @@
+**
+!package.json
+!README.md
+!language-configuration.json
+!syntaxes/**
+!src/**
+!backend/**
+backend/__pycache__/**
+**/__pycache__/**
+**/*.pyc

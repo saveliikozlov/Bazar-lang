@@ -1,0 +1,136 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Bazar",
+  "scopeName": "source.bazar",
+  "patterns": [
+    {
+      "name": "comment.line.bazar",
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(чутки:)(.*)$",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.comment.bazar"
+        }
+      }
+    },
+    {
+      "name": "keyword.control.conditional.bazar",
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(якшо)([ \\t]+)(реально)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])",
+      "captures": {
+        "1": {
+          "name": "keyword.control.conditional.bazar"
+        },
+        "3": {
+          "name": "keyword.control.conditional.bazar"
+        }
+      }
+    },
+    {
+      "name": "keyword.control.conditional.bazar",
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(а)([ \\t]+)(нє)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])",
+      "captures": {
+        "1": {
+          "name": "keyword.control.conditional.bazar"
+        },
+        "3": {
+          "name": "keyword.control.conditional.bazar"
+        }
+      }
+    },
+    {
+      "name": "keyword.control.conditional.bazar",
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(?:якшо|отакої)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])"
+    },
+    {
+      "name": "keyword.control.exit.bazar",
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(всьо)([ \\t]+)(розходимось)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])",
+      "captures": {
+        "1": {
+          "name": "keyword.control.exit.bazar"
+        },
+        "3": {
+          "name": "keyword.control.exit.bazar"
+        }
+      }
+    },
+    {
+      "name": "support.function.print.bazar",
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(?:базарь)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])"
+    },
+    {
+      "name": "keyword.declaration.bazar",
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(?:зуб|даю|мутна|тєма|тіпа|це|перевзувся|тепер)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])"
+    },
+    {
+      "name": "storage.type.bazar",
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(?:дрібняк|крупняк|базар)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])"
+    },
+    {
+      "name": "constant.language.boolean.bazar",
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(?:реально|гон)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])"
+    },
+    {
+      "name": "keyword.operator.logical.bazar",
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(і)([ \\t]+)(ше)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])",
+      "captures": {
+        "1": {
+          "name": "keyword.operator.logical.bazar"
+        },
+        "3": {
+          "name": "keyword.operator.logical.bazar"
+        }
+      }
+    },
+    {
+      "name": "keyword.operator.logical.bazar",
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(?:або)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])"
+    },
+    {
+      "name": "keyword.operator.comparison.bazar",
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(не)([ \\t]+)(рівно)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])",
+      "captures": {
+        "1": {
+          "name": "keyword.operator.comparison.bazar"
+        },
+        "3": {
+          "name": "keyword.operator.comparison.bazar"
+        }
+      }
+    },
+    {
+      "name": "keyword.operator.comparison.bazar",
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(?:рівно|більше|менше)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])"
+    },
+    {
+      "name": "keyword.operator.arithmetic.bazar",
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(ділити)([ \\t]+)(на)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])",
+      "captures": {
+        "1": {
+          "name": "keyword.operator.arithmetic.bazar"
+        },
+        "3": {
+          "name": "keyword.operator.arithmetic.bazar"
+        }
+      }
+    },
+    {
+      "name": "keyword.operator.arithmetic.bazar",
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(?:плюс|мінус|на)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])"
+    },
+    {
+      "name": "constant.numeric.integer.bazar",
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])[0-9]+(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])"
+    },
+    {
+      "name": "punctuation.section.parens.begin.bazar",
+      "match": "\\("
+    },
+    {
+      "name": "punctuation.section.parens.end.bazar",
+      "match": "\\)"
+    },
+    {
+      "name": "variable.other.bazar",
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])[A-Za-z_ЁёА-яІіЇїЄєҐґ][A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ]*"
+    }
+  ]
+}

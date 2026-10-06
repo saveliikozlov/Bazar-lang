@@ -1,0 +1,104 @@
+{
+  "name": "bazar",
+  "displayName": "Bazar («Базар»)",
+  "description": "Syntax highlighting, completion, keyword dictionary, and lexical and syntax error underlines for Bazar.",
+  "version": "0.2.1",
+  "publisher": "bazar-lang",
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0",
+    "node": ">=22"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets"
+  ],
+  "keywords": [
+    "bazar",
+    "базар"
+  ],
+  "main": "./src/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Highlighting, completion, hover help, and the keyword dictionary are always available. Code checking runs Python and is disabled in untrusted workspaces.",
+      "restrictedConfigurations": [
+        "bazar.pythonPath"
+      ]
+    }
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "bazar",
+        "aliases": [
+          "Bazar",
+          "bazar"
+        ],
+        "extensions": [
+          ".bazar"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "bazar",
+        "scopeName": "source.bazar",
+        "path": "./syntaxes/bazar.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "Bazar",
+      "properties": {
+        "bazar.pythonPath": {
+          "type": "string",
+          "default": "python3",
+          "scope": "machine-overridable",
+          "markdownDescription": "Python 3.9 or newer for code checking. A program name in PATH or an executable path, launched without a shell."
+        },
+        "bazar.diagnostics.enabled": {
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "markdownDescription": "Underline lexical and syntax errors in `.bazar` files. Requires Python and a trusted workspace."
+        }
+      }
+    },
+    "configurationDefaults": {
+      "[bazar]": {
+        "editor.quickSuggestions": {
+          "other": true,
+          "comments": false,
+          "strings": false
+        },
+        "editor.suggest.snippetsPreventQuickSuggestions": false,
+        "editor.wordBasedSuggestions": "off"
+      }
+    },
+    "commands": [
+      {
+        "command": "bazar.recheckDiagnostics",
+        "title": "Bazar: Recheck Open Files"
+      },
+      {
+        "command": "bazar.showDictionary",
+        "title": "Bazar: Keyword Dictionary"
+      }
+    ]
+  },
+  "scripts": {
+    "sync-backend": "node scripts/sync-backend.js",
+    "test": "node scripts/sync-backend.js && node --test \"test/unit/*.test.js\"",
+    "test:host": "node scripts/sync-backend.js && node scripts/test-host.js",
+    "package": "node scripts/sync-backend.js && node -e \"require('fs').mkdirSync('dist',{recursive:true})\" && vsce package --no-dependencies --skip-license --allow-missing-repository -o dist/bazar.vsix",
+    "test:vsix": "npm run package && node scripts/test-host.js --vsix dist/bazar.vsix"
+  },
+  "devDependencies": {
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.6.0",
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.3.2"
+  }
+}
