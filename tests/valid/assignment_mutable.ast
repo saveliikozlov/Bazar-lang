@@ -1,0 +1,11 @@
+ProgramNode line=1 column=1
+  DeclarationNode line=1 column=1 name=рахунок type=i32 mutable=true
+    initializer:
+      IntegerNode line=1 column=65 value=0
+  AssignmentNode line=2 column=1 name=рахунок
+    value:
+      BinaryNode line=2 column=63 operator=add
+        left:
+          IdentifierNode line=2 column=48 name=рахунок
+        right:
+          IntegerNode line=2 column=72 value=1

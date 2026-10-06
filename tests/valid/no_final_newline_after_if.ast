@@ -1,0 +1,10 @@
+ProgramNode line=1 column=1
+  IfNode line=1 column=1
+    condition:
+      BooleanNode line=1 column=25 value=true
+    then_body:
+      BlockNode line=2 column=5
+        PrintNode line=2 column=5
+          value:
+            IntegerNode line=2 column=18 value=1
+    else_body: None

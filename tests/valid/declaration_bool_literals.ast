@@ -1,0 +1,7 @@
+ProgramNode line=1 column=1
+  DeclarationNode line=1 column=1 name=правда type=bool mutable=false
+    initializer:
+      BooleanNode line=1 column=53 value=true
+  DeclarationNode line=2 column=1 name=брехня type=bool mutable=true
+    initializer:
+      BooleanNode line=2 column=59 value=false

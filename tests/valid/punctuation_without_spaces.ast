@@ -1,0 +1,17 @@
+ProgramNode line=1 column=1
+  PrintNode line=1 column=1
+    value:
+      BinaryNode line=1 column=16 operator=add
+        left:
+          IntegerNode line=1 column=14 value=1
+        right:
+          BinaryNode line=1 column=27 operator=mul
+            left:
+              IntegerNode line=1 column=25 value=2
+            right:
+              IdentifierNode line=1 column=32 name=x
+  PrintNode line=2 column=1
+    value:
+      UnaryNode line=2 column=14 operator=neg
+        operand:
+          IntegerNode line=2 column=25 value=1

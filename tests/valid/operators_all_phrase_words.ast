@@ -1,0 +1,59 @@
+ProgramNode line=1 column=1
+  PrintNode line=1 column=1
+    value:
+      BinaryNode line=1 column=16 operator=div
+        left:
+          IdentifierNode line=1 column=14 name=a
+        right:
+          IdentifierNode line=1 column=34 name=b
+  PrintNode line=2 column=1
+    value:
+      BinaryNode line=2 column=16 operator=ne
+        left:
+          IdentifierNode line=2 column=14 name=a
+        right:
+          IdentifierNode line=2 column=32 name=b
+  PrintNode line=3 column=1
+    value:
+      BinaryNode line=3 column=16 operator=and
+        left:
+          IdentifierNode line=3 column=14 name=a
+        right:
+          IdentifierNode line=3 column=24 name=b
+  PrintNode line=4 column=1
+    value:
+      BinaryNode line=4 column=16 operator=or
+        left:
+          IdentifierNode line=4 column=14 name=a
+        right:
+          IdentifierNode line=4 column=23 name=b
+  PrintNode line=5 column=1
+    value:
+      BinaryNode line=5 column=27 operator=sub
+        left:
+          UnaryNode line=5 column=14 operator=neg
+            operand:
+              IdentifierNode line=5 column=25 name=a
+        right:
+          IdentifierNode line=5 column=38 name=b
+  PrintNode line=6 column=1
+    value:
+      BinaryNode line=6 column=16 operator=gt
+        left:
+          IdentifierNode line=6 column=14 name=a
+        right:
+          IdentifierNode line=6 column=29 name=b
+  PrintNode line=7 column=1
+    value:
+      BinaryNode line=7 column=16 operator=lt
+        left:
+          IdentifierNode line=7 column=14 name=a
+        right:
+          IdentifierNode line=7 column=27 name=b
+  PrintNode line=8 column=1
+    value:
+      BinaryNode line=8 column=16 operator=eq
+        left:
+          IdentifierNode line=8 column=14 name=a
+        right:
+          IdentifierNode line=8 column=27 name=b

@@ -1,0 +1,27 @@
+ProgramNode line=1 column=1
+  DeclarationNode line=1 column=1 name=x type=i32 mutable=false
+    initializer:
+      IntegerNode line=1 column=48 value=1
+  PrintNode line=2 column=1
+    value:
+      BinaryNode line=2 column=17 operator=div
+        left:
+          IdentifierNode line=2 column=14 name=a
+        right:
+          IdentifierNode line=2 column=38 name=b
+  IfNode line=3 column=1
+    condition:
+      BooleanNode line=3 column=28 value=true
+    then_body:
+      BlockNode line=4 column=3
+        PrintNode line=4 column=3
+          value:
+            IntegerNode line=4 column=16 value=1
+    else_body:
+      BlockNode line=6 column=3
+        PrintNode line=6 column=3
+          value:
+            IntegerNode line=6 column=16 value=2
+  ExitNode line=8 column=1
+    value:
+      IntegerNode line=8 column=34 value=0

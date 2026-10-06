@@ -1,0 +1,41 @@
+ProgramNode line=3 column=1
+  DeclarationNode line=3 column=1 name=зарплата type=i64 mutable=false
+    initializer:
+      IntegerNode line=3 column=61 value=100
+  DeclarationNode line=4 column=1 name=оренда type=i64 mutable=false
+    initializer:
+      IntegerNode line=4 column=57 value=80
+  DeclarationNode line=6 column=1 name=залишок type=i64 mutable=true
+    initializer:
+      BinaryNode line=6 column=82 operator=sub
+        left:
+          IdentifierNode line=6 column=65 name=зарплата
+        right:
+          IdentifierNode line=6 column=93 name=оренда
+  AssignmentNode line=7 column=1 name=залишок
+    value:
+      BinaryNode line=7 column=63 operator=sub
+        left:
+          IdentifierNode line=7 column=48 name=залишок
+        right:
+          IntegerNode line=7 column=74 value=15
+  IfNode line=9 column=1
+    condition:
+      BinaryNode line=9 column=40 operator=gt
+        left:
+          IdentifierNode line=9 column=25 name=залишок
+        right:
+          IntegerNode line=9 column=53 value=0
+    then_body:
+      BlockNode line=10 column=5
+        PrintNode line=10 column=5
+          value:
+            IdentifierNode line=10 column=18 name=залишок
+    else_body:
+      BlockNode line=12 column=5
+        PrintNode line=12 column=5
+          value:
+            IntegerNode line=12 column=18 value=0
+  ExitNode line=15 column=1
+    value:
+      IdentifierNode line=15 column=33 name=залишок

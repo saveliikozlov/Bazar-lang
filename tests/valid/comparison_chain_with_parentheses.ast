@@ -1,0 +1,27 @@
+ProgramNode line=1 column=1
+  PrintNode line=1 column=1
+    value:
+      BinaryNode line=1 column=31 operator=eq
+        left:
+          BinaryNode line=1 column=17 operator=lt
+            left:
+              IdentifierNode line=1 column=15 name=a
+            right:
+              IdentifierNode line=1 column=28 name=b
+        right:
+          BooleanNode line=1 column=42 value=true
+  PrintNode line=2 column=1
+    value:
+      BinaryNode line=2 column=31 operator=ne
+        left:
+          BinaryNode line=2 column=17 operator=eq
+            left:
+              IdentifierNode line=2 column=15 name=a
+            right:
+              IdentifierNode line=2 column=28 name=b
+        right:
+          BinaryNode line=2 column=50 operator=eq
+            left:
+              IdentifierNode line=2 column=48 name=c
+            right:
+              IdentifierNode line=2 column=61 name=d

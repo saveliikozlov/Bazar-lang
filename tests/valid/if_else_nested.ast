@@ -1,0 +1,45 @@
+ProgramNode line=1 column=1
+  DeclarationNode line=1 column=1 name=x type=i32 mutable=true
+    initializer:
+      IntegerNode line=1 column=52 value=10
+  IfNode line=2 column=1
+    condition:
+      BinaryNode line=2 column=27 operator=gt
+        left:
+          IdentifierNode line=2 column=25 name=x
+        right:
+          IntegerNode line=2 column=40 value=0
+    then_body:
+      BlockNode line=3 column=5
+        IfNode line=3 column=5
+          condition:
+            BinaryNode line=3 column=31 operator=ne
+              left:
+                IdentifierNode line=3 column=29 name=x
+              right:
+                IntegerNode line=3 column=47 value=1
+          then_body:
+            BlockNode line=4 column=9
+              AssignmentNode line=4 column=9 name=x
+                value:
+                  BinaryNode line=4 column=45 operator=sub
+                    left:
+                      IdentifierNode line=4 column=43 name=x
+                    right:
+                      IntegerNode line=4 column=56 value=1
+          else_body:
+            BlockNode line=6 column=9
+              IfNode line=6 column=9
+                condition:
+                  BooleanNode line=6 column=33 value=false
+                then_body:
+                  BlockNode line=7 column=13
+                    PrintNode line=7 column=13
+                      value:
+                        IntegerNode line=7 column=26 value=0
+                else_body: None
+    else_body:
+      BlockNode line=11 column=5
+        AssignmentNode line=11 column=5 name=x
+          value:
+            IntegerNode line=11 column=39 value=0

@@ -1,0 +1,21 @@
+ProgramNode line=1 column=1
+  IfNode line=1 column=1
+    condition:
+      BinaryNode line=1 column=27 operator=eq
+        left:
+          IdentifierNode line=1 column=25 name=x
+        right:
+          IntegerNode line=1 column=38 value=0
+    then_body:
+      BlockNode line=2 column=5
+        PrintNode line=2 column=5
+          value:
+            IntegerNode line=2 column=18 value=1
+    else_body:
+      BlockNode line=4 column=5
+        PrintNode line=4 column=5
+          value:
+            IntegerNode line=4 column=18 value=2
+        PrintNode line=5 column=5
+          value:
+            IntegerNode line=5 column=18 value=3

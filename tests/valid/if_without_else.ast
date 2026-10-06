@@ -1,0 +1,17 @@
+ProgramNode line=1 column=1
+  DeclarationNode line=1 column=1 name=x type=i32 mutable=true
+    initializer:
+      IntegerNode line=1 column=52 value=1
+  IfNode line=2 column=1
+    condition:
+      BinaryNode line=2 column=27 operator=gt
+        left:
+          IdentifierNode line=2 column=25 name=x
+        right:
+          IntegerNode line=2 column=40 value=0
+    then_body:
+      BlockNode line=3 column=5
+        AssignmentNode line=3 column=5 name=x
+          value:
+            IntegerNode line=3 column=39 value=0
+    else_body: None

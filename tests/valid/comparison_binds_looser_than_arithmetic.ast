@@ -1,0 +1,16 @@
+ProgramNode line=1 column=1
+  PrintNode line=1 column=1
+    value:
+      BinaryNode line=1 column=27 operator=gt
+        left:
+          BinaryNode line=1 column=16 operator=add
+            left:
+              IdentifierNode line=1 column=14 name=a
+            right:
+              IntegerNode line=1 column=25 value=1
+        right:
+          BinaryNode line=1 column=42 operator=mul
+            left:
+              IdentifierNode line=1 column=40 name=b
+            right:
+              IntegerNode line=1 column=47 value=2

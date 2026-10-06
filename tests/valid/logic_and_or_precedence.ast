@@ -1,0 +1,53 @@
+ProgramNode line=1 column=1
+  PrintNode line=1 column=1
+    value:
+      BinaryNode line=1 column=16 operator=or
+        left:
+          IdentifierNode line=1 column=14 name=a
+        right:
+          BinaryNode line=1 column=25 operator=and
+            left:
+              IdentifierNode line=1 column=23 name=b
+            right:
+              IdentifierNode line=1 column=33 name=c
+  PrintNode line=2 column=1
+    value:
+      BinaryNode line=2 column=26 operator=or
+        left:
+          BinaryNode line=2 column=16 operator=and
+            left:
+              IdentifierNode line=2 column=14 name=a
+            right:
+              IdentifierNode line=2 column=24 name=b
+        right:
+          BinaryNode line=2 column=35 operator=and
+            left:
+              IdentifierNode line=2 column=33 name=c
+            right:
+              IdentifierNode line=2 column=43 name=d
+  PrintNode line=3 column=1
+    value:
+      BinaryNode line=3 column=29 operator=or
+        left:
+          BinaryNode line=3 column=16 operator=eq
+            left:
+              IdentifierNode line=3 column=14 name=x
+            right:
+              IntegerNode line=3 column=27 value=1
+        right:
+          BinaryNode line=3 column=38 operator=ne
+            left:
+              IdentifierNode line=3 column=36 name=y
+            right:
+              IntegerNode line=3 column=54 value=2
+  PrintNode line=4 column=1
+    value:
+      BinaryNode line=4 column=25 operator=or
+        left:
+          BinaryNode line=4 column=16 operator=or
+            left:
+              IdentifierNode line=4 column=14 name=a
+            right:
+              IdentifierNode line=4 column=23 name=b
+        right:
+          IdentifierNode line=4 column=32 name=c

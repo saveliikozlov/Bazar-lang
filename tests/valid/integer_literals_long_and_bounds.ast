@@ -1,0 +1,26 @@
+ProgramNode line=1 column=1
+  DeclarationNode line=1 column=1 name=a type=i32 mutable=false
+    initializer:
+      UnaryNode line=1 column=46 operator=neg
+        operand:
+          IntegerNode line=1 column=57 value=2147483648
+  DeclarationNode line=2 column=1 name=b type=i32 mutable=false
+    initializer:
+      IntegerNode line=2 column=46 value=2147483647
+  DeclarationNode line=3 column=1 name=c type=i64 mutable=false
+    initializer:
+      UnaryNode line=3 column=46 operator=neg
+        operand:
+          IntegerNode line=3 column=57 value=9223372036854775808
+  DeclarationNode line=4 column=1 name=d type=i64 mutable=false
+    initializer:
+      IntegerNode line=4 column=46 value=9223372036854775807
+  DeclarationNode line=5 column=1 name=e type=i32 mutable=false
+    initializer:
+      IntegerNode line=5 column=46 value=0
+  DeclarationNode line=6 column=1 name=f type=i32 mutable=false
+    initializer:
+      IntegerNode line=6 column=46 value=42
+  DeclarationNode line=7 column=1 name=g type=i64 mutable=false
+    initializer:
+      IntegerNode line=7 column=46 value=123456789012345678901234567890123456789012345678901234567890

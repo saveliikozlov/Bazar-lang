@@ -1,0 +1,7 @@
+ProgramNode line=1 column=1
+  PrintNode line=1 column=1
+    value:
+      IdentifierNode line=1 column=14 name=невідомий
+  AssignmentNode line=2 column=1 name=ніхто
+    value:
+      IntegerNode line=2 column=44 value=1

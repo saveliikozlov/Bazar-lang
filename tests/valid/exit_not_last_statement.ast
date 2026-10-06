@@ -1,0 +1,10 @@
+ProgramNode line=1 column=1
+  ExitNode line=1 column=1
+    value:
+      IntegerNode line=1 column=33 value=0
+  PrintNode line=2 column=1
+    value:
+      IntegerNode line=2 column=14 value=1
+  ExitNode line=3 column=1
+    value:
+      IntegerNode line=3 column=33 value=2

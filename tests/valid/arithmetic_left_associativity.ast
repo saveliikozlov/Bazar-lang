@@ -1,0 +1,38 @@
+ProgramNode line=1 column=1
+  PrintNode line=1 column=1
+    value:
+      BinaryNode line=1 column=29 operator=sub
+        left:
+          BinaryNode line=1 column=16 operator=sub
+            left:
+              IdentifierNode line=1 column=14 name=a
+            right:
+              IdentifierNode line=1 column=27 name=b
+        right:
+          IdentifierNode line=1 column=40 name=c
+  PrintNode line=2 column=1
+    value:
+      BinaryNode line=2 column=36 operator=mul
+        left:
+          BinaryNode line=2 column=16 operator=div
+            left:
+              IdentifierNode line=2 column=14 name=a
+            right:
+              IdentifierNode line=2 column=34 name=b
+        right:
+          IdentifierNode line=2 column=41 name=c
+  PrintNode line=3 column=1
+    value:
+      BinaryNode line=3 column=40 operator=add
+        left:
+          BinaryNode line=3 column=27 operator=sub
+            left:
+              BinaryNode line=3 column=16 operator=add
+                left:
+                  IdentifierNode line=3 column=14 name=a
+                right:
+                  IdentifierNode line=3 column=25 name=b
+            right:
+              IdentifierNode line=3 column=38 name=c
+        right:
+          IdentifierNode line=3 column=49 name=d

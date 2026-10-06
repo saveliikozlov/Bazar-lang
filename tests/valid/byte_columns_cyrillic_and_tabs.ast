@@ -1,0 +1,11 @@
+ProgramNode line=1 column=2
+  DeclarationNode line=1 column=2 name=ж type=i32 mutable=false
+    initializer:
+      IntegerNode line=1 column=49 value=1
+  PrintNode line=2 column=1
+    value:
+      BinaryNode line=2 column=21 operator=add
+        left:
+          IdentifierNode line=2 column=16 name=ёё
+        right:
+          IdentifierNode line=2 column=30 name=z

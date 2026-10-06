@@ -1,0 +1,19 @@
+ProgramNode line=1 column=1
+  DeclarationNode line=1 column=1 name=camelCase type=i32 mutable=false
+    initializer:
+      IntegerNode line=1 column=54 value=1
+  DeclarationNode line=2 column=1 name=Ёлка_ёж_123 type=i32 mutable=false
+    initializer:
+      IntegerNode line=2 column=62 value=2
+  DeclarationNode line=3 column=1 name=xЯ9 type=i32 mutable=false
+    initializer:
+      IntegerNode line=3 column=49 value=3
+  DeclarationNode line=4 column=1 name=__ type=i32 mutable=false
+    initializer:
+      IntegerNode line=4 column=47 value=4
+  DeclarationNode line=5 column=1 name=кіт_cat type=i32 mutable=false
+    initializer:
+      IntegerNode line=5 column=55 value=5
+  DeclarationNode line=6 column=1 name=Ґанок_door2 type=i32 mutable=false
+    initializer:
+      IntegerNode line=6 column=61 value=6

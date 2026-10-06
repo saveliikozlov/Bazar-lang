@@ -1,0 +1,11 @@
+ProgramNode line=1 column=1
+  DeclarationNode line=1 column=1 name=код type=i32 mutable=false
+    initializer:
+      IntegerNode line=1 column=51 value=3
+  ExitNode line=2 column=1
+    value:
+      BinaryNode line=2 column=40 operator=sub
+        left:
+          IdentifierNode line=2 column=33 name=код
+        right:
+          IntegerNode line=2 column=51 value=3

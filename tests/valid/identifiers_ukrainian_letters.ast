@@ -1,0 +1,53 @@
+ProgramNode line=2 column=1
+  DeclarationNode line=2 column=1 name=І type=i32 mutable=false
+    initializer:
+      IntegerNode line=2 column=47 value=1
+  DeclarationNode line=3 column=1 name=Ї type=i32 mutable=false
+    initializer:
+      IntegerNode line=3 column=47 value=2
+  DeclarationNode line=4 column=1 name=ї type=i32 mutable=false
+    initializer:
+      IntegerNode line=4 column=47 value=3
+  DeclarationNode line=5 column=1 name=Є type=i32 mutable=false
+    initializer:
+      IntegerNode line=5 column=47 value=4
+  DeclarationNode line=6 column=1 name=є type=i32 mutable=false
+    initializer:
+      IntegerNode line=6 column=47 value=5
+  DeclarationNode line=7 column=1 name=Ґ type=i32 mutable=false
+    initializer:
+      IntegerNode line=7 column=47 value=6
+  DeclarationNode line=8 column=1 name=ґ type=i32 mutable=false
+    initializer:
+      IntegerNode line=8 column=47 value=7
+  DeclarationNode line=10 column=1 name=ій type=i32 mutable=false
+    initializer:
+      IntegerNode line=10 column=49 value=8
+  DeclarationNode line=11 column=1 name=кіт type=i32 mutable=false
+    initializer:
+      IntegerNode line=11 column=51 value=9
+  DeclarationNode line=13 column=1 name=Їжак type=i32 mutable=false
+    initializer:
+      IntegerNode line=13 column=53 value=10
+  DeclarationNode line=14 column=1 name=ґанок type=i32 mutable=false
+    initializer:
+      IntegerNode line=14 column=55 value=11
+  DeclarationNode line=15 column=1 name=Єнот_2 type=i32 mutable=false
+    initializer:
+      IntegerNode line=15 column=55 value=12
+  DeclarationNode line=16 column=1 name=ҐудзикЇ type=i32 mutable=false
+    initializer:
+      IntegerNode line=16 column=59 value=13
+  DeclarationNode line=17 column=1 name=ґі_x type=i32 mutable=false
+    initializer:
+      IntegerNode line=17 column=51 value=14
+  DeclarationNode line=19 column=1 name=АЯаяЁё_9 type=i32 mutable=false
+    initializer:
+      IntegerNode line=19 column=59 value=15
+  PrintNode line=20 column=1
+    value:
+      BinaryNode line=20 column=23 operator=add
+        left:
+          IdentifierNode line=20 column=14 name=Їжак
+        right:
+          IdentifierNode line=20 column=32 name=ґанок

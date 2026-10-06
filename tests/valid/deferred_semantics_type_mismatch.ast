@@ -1,0 +1,20 @@
+ProgramNode line=1 column=1
+  IfNode line=1 column=1
+    condition:
+      IntegerNode line=1 column=25 value=123
+    then_body:
+      BlockNode line=2 column=5
+        DeclarationNode line=2 column=5 name=x type=i32 mutable=false
+          initializer:
+            BinaryNode line=2 column=65 operator=add
+              left:
+                BooleanNode line=2 column=50 value=true
+              right:
+                IntegerNode line=2 column=74 value=1
+    else_body: None
+  DeclarationNode line=4 column=1 name=y type=bool mutable=false
+    initializer:
+      IntegerNode line=4 column=42 value=5
+  ExitNode line=5 column=1
+    value:
+      BooleanNode line=5 column=33 value=false

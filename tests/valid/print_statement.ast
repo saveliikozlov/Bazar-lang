@@ -1,0 +1,10 @@
+ProgramNode line=1 column=1
+  PrintNode line=1 column=1
+    value:
+      IntegerNode line=1 column=14 value=42
+  PrintNode line=2 column=1
+    value:
+      BooleanNode line=2 column=14 value=true
+  PrintNode line=3 column=1
+    value:
+      IntegerNode line=3 column=15 value=1

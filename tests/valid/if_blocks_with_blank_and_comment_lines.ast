@@ -1,0 +1,17 @@
+ProgramNode line=1 column=1
+  IfNode line=1 column=1
+    condition:
+      IdentifierNode line=1 column=25 name=a
+    then_body:
+      BlockNode line=4 column=2
+        PrintNode line=4 column=2
+          value:
+            IntegerNode line=4 column=15 value=1
+        PrintNode line=7 column=4
+          value:
+            IntegerNode line=7 column=17 value=2
+    else_body:
+      BlockNode line=12 column=2
+        PrintNode line=12 column=2
+          value:
+            IntegerNode line=12 column=15 value=3
