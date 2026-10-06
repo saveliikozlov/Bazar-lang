@@ -1,0 +1,407 @@
+AI USAGE HISTORY - Bazar
+Updated: 2026-10-06
+
+Earlier design - date and model unavailable
+------------------------------------------
+The supplied files in ignoreForGit/ describe an earlier AI-assisted language
+design. An assistant contributed the Bazar name, .bazar extension and parts
+of the syntax and language rules. The original conversation and model are
+not available in the supplied material.
+
+2026-10-05 - Project analysis
+----------------------------
+AI: OpenAI Codex, GPT-6.1-Sol, high reasoning effort.
+
+Analyzed the stage instructions, the supplied language design notes and the
+languages-and-compilers-practice reference repository. Defined the scope for
+tasks 2, 4, 5 and 6: grammar, lexer/parser/AST, tests and documentation.
+Prepared implementation requirements and validation criteria for Claude.
+
+2026-10-05 - Initial implementation
+----------------------------------
+AI: Claude Opus 5.5, medium effort.
+
+Implemented grammar.ebnf, lexer.py, parser.py, ast_nodes.py and compiler.py.
+Added handwritten byte state machines with strict UTF-8 validation,
+byte-based source positions, recursive-descent parsing and stable AST dumps.
+Preserved normalized integer text and used iterative traversal for long
+AST chains. Documented the 100-level parentheses/if nesting limit.
+
+Created check.py, 37 valid fixtures, 81 invalid fixtures, five examples,
+39 unit tests, README.md, LANGUAGE.md, EXAMPLES.md and .gitignore.
+Generated expected AST/error files and froze them for later comparisons.
+
+Authentication failure interrupted the first attempt before file edits.
+An API overload interrupted the next attempt after partial implementation.
+Opus resumed the existing work and completed the missing files and checks.
+
+2026-10-05 - Initial review and validation
+----------------------------------------
+AI: OpenAI Codex, GPT-6.1-Sol, high reasoning effort.
+
+Reviewed the actual implementation, grammar, expected outputs and examples.
+Clarified README commands and implementation boundaries.
+
+Recorded results:
+- python3 check.py: 123/123 cases passed.
+- python3 -m unittest discover -s tests -v: 39 tests passed.
+- Python syntax compilation passed.
+- Additional checks covered UTF-8, byte positions, AST structure, nesting
+  boundaries, long literals, CLI streams and missing/incorrect snapshots.
+
+These checks were AI-run validation, without a separate human review claim.
+
+2026-10-05 - AI usage documentation
+----------------------------------
+AI: OpenAI Codex, GPT-6.1-Sol, high reasoning effort.
+
+Created ai_usage.txt to record AI contributions, implementation history and
+actual validation results. Recorded the unavailable earlier design
+conversation without inventing its model or transcript.
+
+2026-10-05 - README revision
+---------------------------
+AI: OpenAI Codex, GPT-6.1-Sol, high reasoning effort.
+
+Rewrote README.md around the language: declarations, types, expressions,
+conditions, source format, compiler usage, AST output and testing.
+Removed references to course tasks, submission and AI disclosure from the
+README while preserving accurate explanations of current compiler behavior.
+
+2026-10-05 - Temporary language rename
+-------------------------------------
+AI: OpenAI Codex, GPT-6.1-Sol, high reasoning effort.
+
+Renamed the language from Bazar to ZubDayuLang in current documentation and
+module descriptions. Preserved syntax and .bazar source extensions.
+The language name was later restored to Bazar during the migration below.
+
+2026-10-05 - Slang diagnostic revision
+------------------------------------
+AI: OpenAI Codex, GPT-6.1-Sol, high reasoning effort.
+
+Adapted lexer/parser diagnostics and CLI wording to Russian slang.
+Updated frozen error files and message assertions while preserving all
+81 error categories and byte positions, output streams and exit statuses.
+The required compilation error prefix remained unchanged.
+
+Validation: 123 CLI cases and 39 unit tests passed; syntax compilation and
+UTF-8 output under an ASCII stream encoding also passed.
+
+2026-10-05 - Ukrainian/surzhyk migration
+--------------------------------------
+AI: Claude Sonnet 5.5, medium effort.
+
+Applied UPDATE_UK_SURZHYK.md and restored the language name Bazar.
+Migrated keywords, phrase operators, comments and diagnostics to the new
+vocabulary. Added Ukrainian identifier letters, a two-word else phrase and
+a single closer for the entire if/else. Removed old syntax aliases while
+allowing former keywords as ordinary identifiers where applicable.
+
+Localized CLI help, file errors, runner output, comments, docstrings and
+documentation. Updated examples, tests and frozen expected outputs.
+Preserved canonical AST types/operators, precedence and parser architecture.
+
+The suite grew to 42 valid fixtures, 104 invalid fixtures, seven examples
+and 71 unit tests. The directory and remote name remain ZubDayuLang;
+source files retain .bazar extensions.
+
+2026-10-05 - Migration review and validation
+------------------------------------------
+AI: OpenAI Codex, GPT-6.1-Sol, high reasoning effort.
+
+Independently reviewed the changes and clarified documentation about source
+positions, simple instructions and the context of an else diagnostic.
+
+Recorded results:
+- python3 check.py: 153/153 cases passed.
+- python3 -m unittest discover -s tests -v: 71 tests passed.
+- Python 3.9.6: 71 unit tests passed.
+- Python syntax compilation passed for implementation and test modules.
+- All three supplied migration programs matched examples and parsed.
+- 34 of 37 original valid AST snapshots retained their shape after excluding
+  positions and identifier names; three intentionally expanded fixtures
+  were reviewed separately.
+- The runner worked outside the repository under an ASCII environment.
+  Missing, wrong and orphaned snapshots failed without regeneration.
+
+No blocking migration defects were found. Semantic checking, execution,
+code generation and the VS Code extension remain outside the implemented
+scope. No commits, pushes, pull requests or submission actions were made.
+
+2026-10-05 - AI usage log cleanup
+--------------------------------
+AI: OpenAI Codex, GPT-6.1-Sol, high reasoning effort.
+
+Reformatted the task history in English and removed internal orchestration
+metadata. Preserved AI attribution, completed work and recorded validation
+results. Project-related user prompts are included in the appendix below.
+Compiler code was unchanged; compiler tests were not rerun for this edit.
+
+2026-10-05 - Persistent failure counters and adaptive diagnostics
+---------------------------------------------------------------
+Implementation AI: Claude Opus 5.5, medium effort.
+Review AI: OpenAI Codex, GPT-6.1-Sol, high reasoning effort.
+
+Added diagnostics.py and integrated adaptive error messages into the
+compiler and standalone lexer CLIs. Two persistent per-user values track
+lifetime failures and the message counter. Each compilation failure adds
+one to both. Above 10 on the message counter, an uncensored exclamation
+precedes the original diagnostic and the message counter drops by two.
+Above 40 lifetime failures, the specified final message replaces the body
+of every compilation error and takes priority over the swear-word tier.
+
+Stored both counters in SQLite with atomic transactions. Added a state-file
+environment override and fallback to the original diagnostic when storage
+is unavailable or invalid. Successful runs, usage errors and file errors
+do not count. Library calls remain free of persistence side effects.
+
+Updated README.md and LANGUAGE.md. Isolated counters in check.py and CLI
+tests so automated validation cannot alter the user's personal state.
+Added 11 regression tests covering boundaries, persistence, both CLIs,
+UTF-8 output, invalid storage, library calls and concurrent failures.
+
+Independent review and recorded results:
+- 153/153 fixture checks passed; all frozen fixtures remained unchanged.
+- 82 unit tests passed on the default Python and Python 3.9.6.
+- Python syntax compilation passed for implementation and test modules.
+- Direct CLI probes verified normal, swear-word and final-message tiers,
+  exact byte positions, one stderr line, empty stdout and exit status 1.
+- Twelve simultaneous failures against initially missing state were all
+  counted, ending at lifetime 12 and message counter 10.
+- The fixture runner passed outside the repository under an ASCII
+  environment without changing a pre-existing personal counter.
+- Original design notes, grammar, parser and AST files were unchanged.
+
+Review outcome: PASS. No actionable defects were found, so no repair cycle
+was needed. Codex updated this English task history after validation.
+
+2026-10-05 - Final submission readiness check
+-------------------------------------------
+AI: OpenAI Codex, GPT-6.1-Sol, high reasoning effort.
+
+Compared the deliverables with the original stage instructions and reviewed
+the grammar, handwritten lexer/parser, AST, fixtures, README and disclosure.
+Reran all 153 fixture cases and 82 unit tests on the default Python and
+Python 3.9.6; all passed. Python syntax compilation passed. Verified expected
+file pairing, error-line format, documentation links and ignored private
+notes/build caches. Tasks 2, 4, 5 and 6 were assessed as technically complete.
+The VS Code extension is optional. Semantic checks belong to the next stage.
+
+Submission was not yet ready at the time of this check:
+- At the time of this check, the disclosure lacked transcript links and
+  original prompts. The available project prompts are now included below.
+  The earlier design conversation remains unavailable, so that part of
+  the historical disclosure is still incomplete.
+- Local stage1 has no commits, and the project files are untracked.
+- The remote repository (saveliikozlov/ZubDayuLang on GitHub) is empty.
+- No pull request exists, and the reviewer invitation remains pending.
+- The required repository/PR links and disclosure still need submission
+  through the course platform before the stated deadline.
+
+This check did not create commits, push files, create a pull request,
+change collaborator access or perform submission. Compiler code was unchanged.
+
+
+2026-10-05 - VS Code extension implementation and final review
+-------------------------------------------------------------
+Implementation and repair AI: Claude Sonnet 5.5, medium effort.
+Review AI: OpenAI Codex, GPT-6.1-Sol, high reasoning effort.
+
+Added a self-contained extension under vscode/ for .bazar files: syntax
+highlighting, keyword and variable completion, snippets, and live lexical
+and syntax error underlines for unsaved text. A bundled Python bridge uses
+the existing lexer and parser without executing programs or incrementing
+compilation failure counters. Added debounce, cancellation, stale-result
+protection, interpreter settings, workspace trust checks, installation
+documentation and an installable VSIX. Updated the language README and
+ignored generated extension dependencies and build artifacts.
+
+Initial review found three acceptance blockers. One repair cycle corrected
+an EOF underline that split an emoji surrogate pair, prevented oversized
+diagnostic output from disabling checks for later edits and other files,
+and corrected the extension build requirement to Node.js 22+. Regression
+tests cover these cases; the final review cleared all three findings.
+
+Independent recorded validation:
+- npm test: 53/53 extension unit tests passed.
+- npm run test:vsix: packaged, installed into a temporary profile, and
+  passed all 12 checks in VS Code 1.140.0 on macOS arm64.
+- Python 3.9.6 bridge compatibility: 6/6 tests passed.
+- Existing compiler validation: 153/153 fixture cases and 82 unit tests
+  passed during initial integration review. Core compiler files, fixtures
+  and original private design notes remained unchanged after repair.
+- Inspected all 15 VSIX entries. Bundled parser files match their sources;
+  the artifact excludes development dependencies, tests and private notes.
+
+An initial final-check attempt ran two backend rebuild commands together
+and caused two transient unit failures. The sequential rerun passed all
+53 tests. Untrusted workspace behavior was verified by unit tests; a real
+untrusted-folder session and other operating systems were not tested.
+
+Review outcome: PASS. No actionable findings remain. The extension was
+installed only into isolated test profiles. No publication, normal-profile
+installation, commits, pushes or submission actions were performed.
+
+2026-10-05 - Keyword dictionary implementation and review
+--------------------------------------------------------
+Implementation AI: Claude Sonnet 5.5, medium effort.
+Review AI: OpenAI Codex, GPT-6.1-Sol, high reasoning effort.
+
+Added a grammar-based keyword dictionary to extension version 0.2.0.
+One data source covers all 31 grammar keyword tokens, the reserved comment
+marker, and eight multiword phrases. Hover help shows meanings, syntax,
+grammar productions and examples. The same entries provide completion
+documentation and a command opening the full dictionary as a read-only
+Markdown document. Keyword help works without Python. Updated the
+extension documentation and the language README's extension section.
+
+Independent review checked coverage and wording against grammar.ebnf,
+including phrase fragments, comment boundaries, case sensitivity,
+UTF-16 ranges and the multiple roles of several keywords. All examples
+parsed. Existing completion insertion behavior was preserved.
+
+Recorded validation:
+- npm test: 70/70 extension unit tests passed.
+- npm run test:vsix: 16/16 installed-host checks passed in an isolated
+  VS Code 1.140.0 session on macOS arm64, including hover help, completion
+  documentation and opening the dictionary with Python unavailable.
+- Inspected all 16 VSIX entries and verified packaged runtime files
+  against their sources. Private notes and development files are excluded.
+- Core compiler files, grammar, fixtures and private design notes stayed
+  unchanged; compiler tests were not repeated for this extension feature.
+
+Review outcome: PASS. No actionable findings were identified. The full
+dictionary opens as Markdown source, and hover help applies to word tokens
+rather than spaces between phrase words. A real untrusted-workspace session
+and other operating systems were not tested. No normal-profile installation,
+publication, commits or pushes were performed.
+
+2026-10-06 - Project review and fixes
+------------------------------------
+AI: Claude Opus 5.5 (Claude Code), effort level not recorded.
+
+Reviewed the whole project against the stage requirements and reported
+critical and moderate issues. Then, at the user's direction:
+- Made the failure counters opt-in (BAZAR_SPICY=1). By default every error
+  is the plain diagnostic and no state is stored. check.py and the CLI tests
+  disable the mode; counter tests enable it explicitly. Added a test that
+  the counters stay off by default.
+- Streamed the AST dump line by line. Peak memory for a 20,000-term chain
+  fell from about 4 GB to about 37 MB. Documented that deep dumps still
+  grow quadratically because of indentation.
+- Allowed the Ukrainian apostrophe (' and U+02BC) between two letters in
+  names (з'їзд, мʼясо). Updated lexer.py, grammar.ebnf, README.md,
+  LANGUAGE.md, the VS Code word definitions, and the tests. The former
+  invalid fixture lex_apostrophe_in_name became the valid fixture
+  identifiers_apostrophe; four invalid apostrophe fixtures were added.
+- Documented literal and named (зуб даю) constants in README.md and added
+  the valid fixture constants_literals_and_named.
+- Corrected the remote name in this file and added the section on what
+  was taken unchanged and what was modified.
+
+New .ast/.err expectation files were generated by the compiler and checked
+by hand (byte columns and messages) before being frozen.
+
+Recorded results:
+- python3 check.py: 158/158 cases passed.
+- python3 -m unittest discover -s tests: 85 tests passed.
+- vscode npm test: 70/70 tests passed.
+
+WHAT WAS TAKEN UNCHANGED AND WHAT WAS MODIFIED
+---------------------------------------------
+Taken from AI output without changes to its substance:
+- Implementation code: lexer.py, parser.py, ast_nodes.py, compiler.py,
+  diagnostics.py, check.py, and the vscode/ extension were written by the
+  AI assistants listed above. They were accepted after review and test runs
+  without line-by-line rewriting by the author.
+- Test fixtures and frozen expected .ast/.err files were generated by
+  running the AI-written compiler, then reviewed and frozen.
+- Wording of most documentation (README.md, LANGUAGE.md, EXAMPLES.md) and of
+  the compiler diagnostics.
+
+Modified or decided by the author (directions given in the prompts below):
+- The language concept: slang keywords, the "you answer for your words"
+  idea, and the switch from Russian slang to Ukrainian/surzhyk
+  (UPDATE_UK_SURZHYK.md).
+- Scope: which stage tasks to do, no references to the course in the README,
+  and the optional VS Code extension and keyword dictionary.
+- The failure counter feature, its thresholds and the separate lifetime
+  counter, and later the decision to make it opt-in.
+- Review decisions in the 2026-10-06 session: opt-in counters, apostrophes
+  in names, documenting constants instead of adding a constant keyword.
+- [TODO author: list any code, test, or text you changed yourself, by hand.
+  If none, delete this line.]
+
+Earlier design conversation:
+- [TODO author: paste the share link(s) to the chat that produced the first
+  Bazar design (name, .bazar extension, first syntax), or paste its exact
+  prompts below. If it is truly lost, replace this line with a statement
+  saying so and what was taken from it.]
+- [TODO author: paste the full text of UPDATE_UK_SURZHYK.md, or say who
+  wrote it, since the prompt below only attaches it.]
+
+USER PROMPTS
+
+BEGIN USER PROMPT
+Hello!! I want you to help me to complete stage1 of my project. We are creating our own programming language. For reference, I want you to analyze how it is already done in similar way in another folder: /Users/saveliikozlov/Studies/Languages_and_Compilers/repo/languages-and-compilers-practice 
+
+Here you can find the references, we will need to make something similar, however extended. I will add already some files that are related to my new language, its ideas and some syntax, you need to adapt this. They are located in folder "ignoreForGit"
+
+For now let's do tasks 2, 4, 5, 6
+
+Here is the main file with stage instructions: [w04-project-stage1-1.pdf]
+END USER PROMPT
+
+
+BEGIN USER PROMPT
+Do not forget to create ai_usage file here
+END USER PROMPT
+
+BEGIN USER PROMPT
+edit the Readme in a way that it should not have any references to the task. Only explanations related to the language.
+END USER PROMPT
+
+BEGIN USER PROMPT
+[UPDATE_UK_SURZHYK.md] Try to adapt those changes, make claude sonnet do them
+END USER PROMPT
+
+BEGIN USER PROMPT
+Can you show me the basic keywords and compilation errors
+END USER PROMPT
+
+BEGIN USER PROMPT
+Let's add a little feature. I want to have a counter of compilation failures made by user. If the count is more than 10 It should have another text for that compilation error, but more in non-censorship way using swear words with "!" and every new non-censor error, it should decrease the counter by 2. If the counter is more than 40 it should enter this message to all errors: "Вась... Ну тут вже все."
+END USER PROMPT
+
+BEGIN USER PROMPT
+Use a separate lifetime failure total for the >40 message, while the message counter still decreases by 2.
+END USER PROMPT
+
+BEGIN USER PROMPT
+Okay, and what messages the compiler outputs if counter > 10
+END USER PROMPT
+
+BEGIN USER PROMPT
+Okay, let's do the final check, whether we are ready for submission.
+END USER PROMPT
+
+BEGIN USER PROMPT
+Hello!! let's implement the vscode extension that will show autocompletion and syntax underline
+END USER PROMPT
+
+BEGIN USER PROMPT
+Okay, let's add dictionary that will show what each keyword mean, according to our grammar. Use claude sonnet
+END USER PROMPT
+
+BEGIN USER PROMPT
+Can you rate the current project and point its mistakes.
+END USER PROMPT
+
+BEGIN USER PROMPT
+How can we fix the critical and moderate
+END USER PROMPT
+
+Answers to the assistant's follow-up questions in that session:
+counters opt-in via environment variable; constants documented with a
+fixture; allow apostrophes inside names; commit locally, author pushes.
