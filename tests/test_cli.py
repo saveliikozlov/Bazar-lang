@@ -10,7 +10,6 @@ import unittest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from diagnostics import SPICY_ENV, STATE_ENV  # noqa: E402
 COMPILER = ROOT / "compiler.py"
 LEXER = ROOT / "lexer.py"
 
@@ -21,10 +20,6 @@ class CliTest(unittest.TestCase):
         self.addCleanup(self.directory.cleanup)
 
     def run_script(self, script, *arguments, env=None):
-        """Always isolate failure state, even when the environment specifies a path."""
-        env = dict(os.environ if env is None else env)
-        env[STATE_ENV] = str(Path(self.directory.name) / "failures.sqlite3")
-        env.pop(SPICY_ENV, None)
         return subprocess.run([sys.executable, str(script), *arguments],
                               capture_output=True, cwd=self.directory.name, timeout=60, env=env)
 

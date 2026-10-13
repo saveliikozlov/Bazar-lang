@@ -104,9 +104,8 @@ scripts/                    backend synchronization and integration testing
 test/                       unit and integration tests
 ```
 
-The bridge calls only `parse_program()`, bypassing `compiler.py` and failure
-counters. Editor errors use the original Ukrainian messages, without swear-word
-prefixes or the final counter message. Compiler positions (1-based line and
+The bridge calls only `parse_program()`, bypassing `compiler.py`. Editor
+errors use the same Ukrainian messages as the compiler. Compiler positions (1-based line and
 UTF-8 byte column) are converted to UTF-16 ranges, accounting for Cyrillic,
 emoji, tabs, and CRLF.
 

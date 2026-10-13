@@ -1,5 +1,5 @@
 AI USAGE HISTORY - Bazar
-Updated: 2026-10-06
+Updated: 2026-10-13
 
 Earlier design - date and model unavailable
 ------------------------------------------
@@ -308,6 +308,24 @@ Recorded results:
 - python3 -m unittest discover -s tests: 85 tests passed.
 - vscode npm test: 70/70 tests passed.
 
+2026-10-13 - Stage 1 feedback fixes: spicy mode removed
+------------------------------------------------------
+AI: Claude Opus 5.5 (Claude Code), effort level not recorded.
+
+Explained the lecturer's Stage 1 feedback and proposed fixes. At the
+user's direction, on branch stage1-fixes:
+- Removed the opt-in "spicy mode": deleted diagnostics.py and
+  tests/test_diagnostics.py. compiler.py and lexer.py now always print the
+  plain diagnostic through lexer.compilation_error_line(); no state is
+  read or written. Removed counter isolation from check.py, the CLI tests
+  and the VS Code bridge test, and the spicy sections from README.md,
+  LANGUAGE.md and vscode/README.md.
+
+Recorded results:
+- python3 check.py: 158/158 cases passed (expected files unchanged).
+- python3 -m unittest discover -s tests: 73 tests passed.
+- vscode npm test: 69/69 tests passed.
+
 WHAT WAS TAKEN UNCHANGED AND WHAT WAS MODIFIED
 ---------------------------------------------
 Taken from AI output without changes to its substance:
@@ -405,3 +423,16 @@ END USER PROMPT
 Answers to the assistant's follow-up questions in that session:
 counters opt-in via environment variable; constants documented with a
 fixture; allow apostrophes inside names; commit locally, author pushes.
+
+BEGIN USER PROMPT
+I have got this feedback from the lecturer, I want to understand what is the exact problem and how to fix that. [Stage 1 feedback pasted]
+END USER PROMPT
+
+BEGIN USER PROMPT
+Okay, we simply cannot do anything with 1 and 2, so let's leave it be. Now, let's try to fix 3, 4 and 5. What are your propositions ?
+END USER PROMPT
+
+BEGIN USER PROMPT
+1. Ok, delete it
+2. Keyword: желєзобетонно  ; Initializer: constant expression with operators and other constants
+END USER PROMPT

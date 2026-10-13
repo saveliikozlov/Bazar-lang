@@ -11,12 +11,10 @@ const { runBridge } = require('../../src/runner');
 const root = path.resolve(__dirname, '..', '..', '..');
 const script = path.resolve(__dirname, '..', '..', 'backend', 'bazar_bridge.py');
 const python = process.env.BAZAR_PYTHON || 'python3';
-const counterFile = path.join(os.tmpdir(), `bazar-bridge-counter-${process.pid}.sqlite3`);
 
 function bridge(text) {
   const out = execFileSync(python, ['-I', script], {
     input: JSON.stringify({ text }),
-    env: { ...process.env, BAZAR_FAILURE_COUNTER_FILE: counterFile },
   });
   return JSON.parse(out.toString('utf8'));
 }
@@ -58,12 +56,6 @@ test("invalid fixtures retain exact .err messages and positions", () => {
   }
   assert.ok(compared >= 90, `only ${compared} fixtures compared`);
   assert.ok(skipped <= 10);
-});
-
-test("bridge does not create or modify failure counter state", () => {
-  bridge('зуб даю x\n');
-  bridge('зуб даю x тіпа дрібняк це 1\n');
-  assert.strictEqual(fs.existsSync(counterFile), false);
 });
 
 test("lone surrogate reports a lexical error at its byte position", () => {

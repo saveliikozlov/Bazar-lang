@@ -6,7 +6,6 @@ Exit codes:
     0: valid syntax; AST dump and final LF on stdout.
     1: lexical or syntax error; empty stdout and one stderr line:
            compilation error: line L:C: MESSAGE
-       The error body depends on failure counters; see diagnostics.py.
     2: invalid arguments or unreadable input.
 
 Semantic checking and code generation are not implemented.
@@ -15,8 +14,7 @@ Semantic checking and code generation are not implemented.
 from pathlib import Path
 import sys
 
-from diagnostics import compilation_error_line
-from lexer import LexError, describe_os_error, write_text
+from lexer import LexError, compilation_error_line, describe_os_error, write_text
 from parser import CompilationError, parse_program
 
 USAGE = "Запускай так: python3 compiler.py --ast <input.bazar>"

@@ -227,40 +227,6 @@ The fixed prefix and byte position identify the location. Examples:
 
 The compiler writes all messages as UTF-8 bytes, regardless of terminal locale.
 
-### Spicy mode (optional failure counters)
-
-By default, every error uses the plain diagnostic above, and the compiler
-keeps no state. Set `BAZAR_SPICY=1` to turn on an optional joke mode with
-persistent counters, in which the compiler's mood degrades as failures
-accumulate. With spicy mode on, every lexical or syntax failure from
-`compiler.py` or `lexer.py` increments two persistent counters by 1:
-
-- `lifetime_failures`: all failures ever recorded; never decreases.
-- `message_counter`: decreases by 2 after each swear-word diagnostic.
-
-After incrementing, the first applicable rule takes priority. Thresholds
-are strict:
-
-1. `lifetime_failures > 40`: replace the error body with `Вась... Ну тут вже все.`;
-   do not decrease the message counter.
-2. `message_counter > 10`: prepend an uncensored exclamation containing `!`
-   to the original message, then decrease `message_counter` by 2.
-3. Otherwise, use the original message.
-
-The `compilation error: line L:C:` prefix, position, exit code 1, and empty
-stdout remain unchanged. Starting from zero, failures 1–10 are ordinary,
-odd-numbered failures 11–39 use swear words, failure 40 is ordinary, and
-failure 41 onward uses only `Вась... Ну тут вже все.`. Successes, argument
-errors, and unreadable files neither increment nor reset the counters.
-
-State is stored in `~/.bazar/compiler_failures.sqlite3`, shared across projects
-for the OS user. Override the path with `BAZAR_FAILURE_COUNTER_FILE`.
-Concurrent invocations are counted atomically. To reset the counters, delete
-the file while the compiler is not running. If storage is unavailable or
-corrupt, the compiler uses the original diagnostic and leaves the file alone.
-`check.py` and the CLI tests disable spicy mode; counter tests enable it with
-temporary state and do not change your counters.
-
 ### Source positions
 
 Lines and columns start at 1. Columns count **UTF-8 bytes**: a Cyrillic letter
@@ -326,11 +292,9 @@ codes and both output streams, reports each failure, and exits nonzero if any
 check fails. It never rewrites expected files. Missing expectations and orphan
 expectation files without sources are failures.
 
-The 85 unit tests cover UTF-8 validation, byte positions, identifiers
+The 73 unit tests cover UTF-8 validation, byte positions, identifiers
 (including both cases of every Ukrainian letter), keywords, comments, line
-endings, AST structure, operators, nesting, diagnostics, CLI output, and
-spicy-mode counters (disabled by default, thresholds, shared state, storage
-failures, and concurrency).
+endings, AST structure, operators, nesting, diagnostics, and CLI output.
 They also confirm that semantic violations are accepted when syntax is valid.
 The `tests/invalid/syntax_legacy_ru_*` fixtures deliberately contain old Russian
 syntax to verify its rejection.
@@ -356,7 +320,6 @@ lexer.py       byte-oriented lexer state machine
 parser.py      recursive-descent parser
 ast_nodes.py   AST classes and stable dump
 compiler.py    command-line interface
-diagnostics.py optional spicy-mode counters and CLI error text
 check.py       fixture validation runner
 examples/      sample programs
 tests/         source fixtures, expected results, and unit tests

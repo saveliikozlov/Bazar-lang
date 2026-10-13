@@ -9,17 +9,14 @@ examples/NAME.bazar: exit 0 and empty stderr.
 Expectations are never written or regenerated. CLI invocations run from a
 temporary directory, independently of the current working directory.
 Orphan .ast/.err files without matching .bazar sources also fail. Exit 0
-requires every check to pass. Output is UTF-8 regardless of locale. Each
-CLI run disables BAZAR_SPICY and has isolated temporary counter state.
+requires every check to pass. Output is UTF-8 regardless of locale.
 """
 
-import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 
-from diagnostics import SPICY_ENV, STATE_ENV
 from lexer import write_text
 
 ROOT = Path(__file__).resolve().parent
@@ -31,16 +28,8 @@ def show(data):
 
 
 def run_compiler(source, cwd):
-    """Give each invocation a clean temporary failure counter.
-
-    Frozen .err files stay independent of case order; personal counters
-    are never modified."""
-    with tempfile.TemporaryDirectory() as state:
-        env = dict(os.environ)
-        env[STATE_ENV] = os.path.join(state, "failures.sqlite3")
-        env.pop(SPICY_ENV, None)
-        return subprocess.run([sys.executable, str(COMPILER), "--ast", str(source)],
-                              capture_output=True, cwd=cwd, timeout=60, env=env)
+    return subprocess.run([sys.executable, str(COMPILER), "--ast", str(source)],
+                          capture_output=True, cwd=cwd, timeout=60)
 
 
 def check_valid(source, cwd):

@@ -313,6 +313,11 @@ OS_ERROR_TEXT = {
 }
 
 
+def compilation_error_line(error):
+    """Format the single stderr line for a lexical or syntax error."""
+    return f"compilation error: line {error.line}:{error.column}: {error.message}\n"
+
+
 def describe_os_error(error):
     """Localized OS error descriptions, independent of system language."""
     return OS_ERROR_TEXT.get(error.errno) or f"помилка системи (errno {error.errno})"
@@ -325,7 +330,6 @@ def main():
     try:
         tokens = lex(Path(sys.argv[1]).read_bytes())
     except LexError as error:
-        from diagnostics import compilation_error_line
         write_text(sys.stderr, compilation_error_line(error))
         return 1
     except OSError as error:

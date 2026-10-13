@@ -230,10 +230,6 @@ See [README.md](README.md#ast-dump-format) for the `compiler.py --ast` dump form
   The dump is streamed line by line; its indentation still makes the output
   of a very deep chain grow quadratically.
 - The entire file is read into memory.
-- By default, CLI error text is exactly the diagnostic. Only the opt-in
-  `BAZAR_SPICY=1` mode changes it according to persistent failure counters
-  (swear words or `Вась... Ну тут вже все.`; see README). Positions and the `compilation error:`
-  prefix are unaffected.
 
 ## 8. Features absent from this version
 

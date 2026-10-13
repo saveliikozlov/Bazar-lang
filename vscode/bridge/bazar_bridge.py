@@ -7,8 +7,7 @@ stdout JSON line:
     {"ok": false, "fatal": {"code": "...", "detail": "..."}}
 
 Positions are 1-based, with UTF-8 byte columns matching the compiler.
-User programs are not executed and AST dumps are not emitted. The CLI failure
-counter module diagnostics is never imported.
+User programs are not executed and AST dumps are not emitted.
 """
 
 import json
