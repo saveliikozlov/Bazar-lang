@@ -92,12 +92,33 @@ class HierarchyTest(unittest.TestCase):
         program = parse("\n\nчутки: нічого\n")
         self.assertEqual((program.line, program.column, program.statements), (4, 1, []))
 
-    def test_integer_text_is_normalised_and_unbounded(self):
-        digits = "9" * 5000            # exceeds the default Python int/string conversion limit
-        value = parse("базарь 000" + digits).statements[0].value
-        self.assertEqual(value.value, digits)
+    def test_integer_text_is_normalised(self):
+        self.assertEqual(parse("базарь 0009223372036854775807").statements[0].value.value,
+                         "9223372036854775807")
         self.assertEqual(parse("базарь 0000").statements[0].value.value, "0")
-        self.assertEqual(len(parse("базарь " + "9" * 10000).statements[0].value.value), 10000)
+
+    def test_literals_beyond_i64_are_rejected(self):
+        # 10000 digits exceed Python's default int/string conversion limit.
+        for source, column in (("базарь " + "9" * 10000, 14),
+                               ("базарь мінус 9223372036854775809", 25)):
+            with self.subTest(source=source[:40]):
+                with self.assertRaises(LexError) as context:
+                    parse(source)
+                self.assertEqual((context.exception.line, context.exception.column), (1, column))
+                self.assertIn("Число завелике", context.exception.message)
+
+    def test_i64_min_magnitude_only_after_unary_minus(self):
+        value = parse("базарь мінус 9223372036854775808").statements[0].value
+        self.assertEqual((value.operator, value.operand.value), ("neg", "9223372036854775808"))
+        parse("базарь мінус мінус 9223372036854775808")   # -(-MIN) overflows at run time
+        for source, column in (("базарь 9223372036854775808", 14),
+                               ("базарь мінус (9223372036854775808)", 26),
+                               ("базарь 1 мінус 9223372036854775808", 27)):
+            with self.subTest(source=source):
+                with self.assertRaises(CompilationError) as context:
+                    parse(source)
+                self.assertEqual((context.exception.line, context.exception.column), (1, column))
+                self.assertIn("не влазить навіть у «крупняк»", context.exception.message)
 
     def test_parser_class_entrypoint(self):
         program = Parser(lex("базарь гон".encode())).parse_program()

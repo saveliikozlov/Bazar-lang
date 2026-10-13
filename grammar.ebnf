@@ -126,10 +126,14 @@ multiplicative_operator = "на" | "ділити", "на" ;
 
 (* Unary minus is right-associative: "мінус мінус x" means -(-x).
    After an operand, "мінус" is the binary additive operator instead. *)
-unary = "мінус", unary
+unary = "мінус", ( unary | I64_MIN_MAGNITUDE )
       | primary ;
 
-primary = INTEGER
+(* Overflow check, second layer: I64_MIN_MAGNITUDE (9223372036854775808) is
+   the magnitude of the smallest крупняк value, so it is accepted only as the
+   direct operand of unary "мінус". Without that "мінус" (alone, in
+   parentheses, or after binary "мінус") it is a syntax error. *)
+primary = SMALL_INTEGER
         | boolean_literal
         | IDENT
         | "(", expression, ")" ;
@@ -246,11 +250,19 @@ reserved_word = keyword | "чутки" ;
 IDENT = word - reserved_word ;
 
 (* Unsigned decimal digits; the sign is a separate "мінус" operator.
-   Leading zeros and arbitrary lengths are allowed. Literal 2147483648 is
-   lexically and syntactically valid; fitting its type is a semantic question.
-   INTEGER immediately followed by a letter or "_" causes a lexical error at its
-   first digit: "12abc", "12_3", "0x1F", "10L". *)
-INTEGER = digit, { digit } ;
+   Leading zeros are allowed. INTEGER immediately followed by a letter or "_"
+   causes a lexical error at its first digit: "12abc", "12_3", "0x1F", "10L".
+
+   Overflow check, first layer: no Bazar type is wider than крупняк (i64),
+   so a literal whose value, ignoring leading zeros, is greater than
+   9223372036854775808 (2^63) is a lexical error at its first digit.
+   The lexer emits one INTEGER token kind; its value decides which of the
+   two forms below the syntactic grammar sees. Whether a literal fits its
+   declared type (2147483648 in дрібняк) and whether arithmetic overflows
+   are checked by the semantic stage and at run time. *)
+INTEGER = SMALL_INTEGER | I64_MIN_MAGNITUDE ;
+SMALL_INTEGER = ? digit, { digit } with value 0 … 9223372036854775807 ? ;
+I64_MIN_MAGNITUDE = ? digit, { digit } with value 9223372036854775808 ? ;
 
 (* Any other character outside comments produces a lexical error, including
    "+", "-", "=", ";", ":", '"', emoji, disallowed letters such as "é" or "Љ",

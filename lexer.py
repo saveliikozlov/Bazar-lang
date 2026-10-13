@@ -38,6 +38,21 @@ KEYWORDS = frozenset((
     "гон", "або", "і", "ше", "рівно", "не", "більше", "менше",
     "плюс", "мінус", "на", "ділити",
 ))
+# Overflow check, first layer: no integer type is wider than крупняк (i64).
+# The largest literal is the magnitude of i64's minimum, 2**63, which is only
+# valid directly after unary мінус (enforced by the parser).
+I64_MAX = "9223372036854775807"
+I64_MIN_MAGNITUDE = "9223372036854775808"
+
+
+def exceeds_i64_magnitude(digits):
+    """Compare decimal text with 2**63 without converting it to int."""
+    digits = digits.lstrip("0") or "0"
+    if len(digits) != len(I64_MIN_MAGNITUDE):
+        return len(digits) > len(I64_MIN_MAGNITUDE)
+    return digits > I64_MIN_MAGNITUDE
+
+
 # Also reserved, but not emitted as a token: чутки: starts a comment.
 COMMENT_WORD = "чутки"
 
@@ -252,7 +267,12 @@ class Lexer:
                 if cp is not None and is_word_start(cp):
                     raise LexError(self.token_line, self.token_column,
                                    "Число з буквами? Не мути: після цифр букви й '_' не ліплять.")
-                self.emit(INTEGER, self.data[self.token_start:offset].decode("ascii"))
+                digits = self.data[self.token_start:offset].decode("ascii")
+                if exceeds_i64_magnitude(digits):
+                    raise LexError(self.token_line, self.token_column,
+                                   f"Число завелике, шеф: у Базарі найбільше ціле — {I64_MAX} "
+                                   f"(межа «крупняк»), більше ніде не влізе.")
+                self.emit(INTEGER, digits)
                 continue
 
             if state == COMMENT:

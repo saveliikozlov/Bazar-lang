@@ -13,7 +13,8 @@ from ast_nodes import (
     ExitNode, IdentifierNode, IfNode, IntegerNode, PrintNode, ProgramNode,
     UnaryNode,
 )
-from lexer import EOF, IDENT, INTEGER, KEYWORD, KEYWORDS, LPAREN, NEWLINE, RPAREN, lex
+from lexer import (EOF, I64_MIN_MAGNITUDE, IDENT, INTEGER, KEYWORD, KEYWORDS, LPAREN, NEWLINE,
+                   RPAREN, lex)
 
 TYPE_NAMES = {"дрібняк": "i32", "крупняк": "i64", "базар": "bool"}
 
@@ -379,7 +380,12 @@ class Parser:
         minuses = []
         while self.at_keyword("мінус"):
             minuses.append(self.eat())
+        token = self.peek()
         node = self.parse_primary()
+        # Overflow check, second layer: 2**63 is i64's minimum only when negated.
+        if not minuses and token.kind == INTEGER and node.value == I64_MIN_MAGNITUDE:
+            raise self.error(f"Число {I64_MIN_MAGNITUDE} не влазить навіть у «крупняк»: "
+                             f"так можна писати тільки «мінус {I64_MIN_MAGNITUDE}».", token)
         for operator in reversed(minuses):
             node = UnaryNode(operator.line, operator.column, "neg", node)
         return node

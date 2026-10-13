@@ -2,13 +2,15 @@ ProgramNode line=1 column=1
   DeclarationNode line=1 column=1 name=x type=i32 mutable=false
     initializer:
       IntegerNode line=1 column=46 value=2147483648
-  DeclarationNode line=2 column=1 name=y type=i64 mutable=false
+  DeclarationNode line=2 column=1 name=y type=i32 mutable=false
     initializer:
-      IntegerNode line=2 column=46 value=9223372036854775808
+      UnaryNode line=2 column=46 operator=neg
+        operand:
+          IntegerNode line=2 column=57 value=9223372036854775808
   PrintNode line=3 column=1
     value:
-      BinaryNode line=3 column=35 operator=mul
+      BinaryNode line=3 column=34 operator=add
         left:
-          IntegerNode line=3 column=14 value=99999999999999999999
+          IntegerNode line=3 column=14 value=9223372036854775807
         right:
-          IntegerNode line=3 column=40 value=99999999999999999999
+          IntegerNode line=3 column=43 value=1

@@ -3,12 +3,15 @@
 Bazar is a small programming language with Ukrainian keywords and a surzhyk
 style, as if a cheeky friend were explaining programming beside a garage.
 `желєзобетонно` declares a compile-time constant, `зуб даю` an immutable
-variable, `мутна тєма` a mutable one, and `перевзувся` assigns a new value. Conditions start with `якшо реально`,
-may have an `а нє` branch, and end with `отакої`. Source files use `.bazar`.
+variable, `мутна тєма` a mutable one, and `перевзувся` assigns a new value.
+Conditions start with `якшо реально`, may have an `а нє` branch, and end with
+`отакої`. Source files use `.bazar`.
 
 The compiler reads UTF-8 source, checks lexical and syntactic structure, and
-prints an abstract syntax tree (AST). It does not execute programs or check
-semantic rules such as types, mutability, or overflow.
+prints an abstract syntax tree (AST). It already rejects integer literals
+that no Bazar type can hold (see [Overflow checks](#overflow-checks)). It
+does not yet execute programs or check semantic rules such as types and
+mutability.
 
 | Document | Contents |
 | --- | --- |
@@ -194,8 +197,9 @@ Source files use UTF-8 without a byte order mark.
   reserved, including `а`, `нє`, `і`, and `ше`. A keyword prefix does not
   reserve a whole name: `дрібняк_2` is an identifier. Words absent from the
   language, such as `якщо` and `кажи`, are ordinary identifiers.
-- Integers are decimal digit sequences of arbitrary length. Leading zeros
-  are allowed. Negative values use unary `мінус`. Forms such as `12abc`,
+- Integers are decimal digit sequences from `0` to `9223372036854775807`.
+  Leading zeros are allowed. Negative values use unary `мінус`; the literal
+  `9223372036854775808` is allowed only as `мінус 9223372036854775808`. Forms such as `12abc`,
   `12_3`, `0x1F`, and `1.5` are invalid.
 - Spaces and tabs separate words. LF and CRLF are accepted line endings;
   a standalone CR is invalid.
@@ -277,8 +281,7 @@ retain source order. An absent else branch prints as `else_body: None`.
 
 Types use canonical names `i32`, `i64`, and `bool`; operators use
 `add sub mul div neg eq ne gt lt and or`. Boolean values are `true` and `false`.
-Integer literals retain digits without leading zeros, so their length is
-not limited by Python integer conversion.
+Integer literals are printed without leading zeros.
 
 ## Semantic rules and current behavior
 
@@ -290,9 +293,27 @@ an AST; semantic checking and execution are not implemented.
 Assigning to an immutable variable or initializing `дрібняк` with `2147483648`
 therefore produces an AST if the syntax is valid.
 
-Intended overflow behavior is an error rather than wraparound. Minimum values
-are written as `мінус 2147483648` and `мінус 9223372036854775808`, with range
-checking after unary minus. Integer division truncates toward zero. Division
+### Overflow checks
+
+Overflow is always an error, never a wraparound. It is checked in layers,
+each as early as the information is available:
+
+| Stage | Check | Status |
+| --- | --- | --- |
+| lexer | a literal above `9223372036854775808` fits no type | implemented |
+| parser | `9223372036854775808` only directly after unary `мінус` | implemented |
+| semantic analysis | a literal or constant value fits its declared type | next stage |
+| generated code | `плюс`, `мінус`, `на`, `ділити на`, and negation results | later stage |
+
+```text
+базарь 99999999999999999999          чутки: lexical error, too large for any type
+базарь 9223372036854775808           чутки: syntax error, needs мінус
+базарь мінус 9223372036854775808     чутки: valid, the smallest крупняк
+зуб даю x тіпа дрібняк це 2147483648 чутки: valid syntax, semantic error later
+```
+
+Minimum values are written as `мінус 2147483648` and
+`мінус 9223372036854775808`. Integer division truncates toward zero. Division
 by zero or division of the minimum value by `мінус 1` is an error under the
 intended rules.
 
@@ -311,13 +332,13 @@ python3 check.py
 python3 -m unittest discover -s tests -v
 ```
 
-The fixture runner compares 48 valid programs with expected ASTs, 115 invalid
+The fixture runner compares 47 valid programs with expected ASTs, 121 invalid
 programs with expected error lines, and checks 8 examples. It verifies exit
 codes and both output streams, reports each failure, and exits nonzero if any
 check fails. It never rewrites expected files. Missing expectations and orphan
 expectation files without sources are failures.
 
-The 75 unit tests cover UTF-8 validation, byte positions, identifiers
+The 77 unit tests cover UTF-8 validation, byte positions, identifiers
 (including both cases of every Ukrainian letter), keywords, comments, line
 endings, AST structure, operators, nesting, diagnostics, and CLI output.
 They also confirm that semantic violations are accepted when syntax is valid.

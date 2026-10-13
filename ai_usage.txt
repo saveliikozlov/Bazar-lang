@@ -355,6 +355,36 @@ Recorded results:
 - python3 -m unittest discover -s tests: 75 tests passed.
 - vscode npm test: 70/70 tests passed. npm run test:vsix was not run.
 
+2026-10-13 - Stage 1 feedback fixes: integer overflow checks
+-----------------------------------------------------------
+AI: Claude Opus 5.5 (Claude Code), effort level not recorded.
+
+Implemented the first two of four planned overflow layers on branch
+stage1-fixes, following the plan the user accepted:
+- lexer.py: a literal whose value exceeds 9223372036854775808 (2^63) is a
+  lexical error at its first digit. The comparison uses the digit text,
+  so very long literals never reach Python int conversion.
+- parser.py: 9223372036854775808 is accepted only as the direct operand
+  of unary мінус (the smallest крупняк value); alone, in parentheses or
+  after binary мінус it is a syntax error.
+- grammar.ebnf: INTEGER split into SMALL_INTEGER and I64_MIN_MAGNITUDE;
+  unary and primary updated so the grammar matches the parser exactly.
+- Range checks against the declared type stay in the semantic stage and
+  arithmetic checks in generated code; README.md now has an "Overflow
+  checks" section with all four layers. LANGUAGE.md, EXAMPLES.md and the
+  VS Code dictionary entry for мінус were updated.
+- Tests: the 10000-digit literal fixture moved from valid to invalid,
+  the over-long literal was removed from integer_literals_long_and_bounds,
+  deferred_semantics_integer_overflow rewritten to cases that are still
+  semantic, 5 new invalid fixtures, and the parser unit test for unbounded
+  literals replaced by three overflow tests. New expected files were
+  checked by hand before freezing.
+
+Recorded results:
+- python3 check.py: 176/176 cases passed.
+- python3 -m unittest discover -s tests: 77 tests passed.
+- vscode npm test: 70/70 tests passed. npm run test:vsix was not run.
+
 WHAT WAS TAKEN UNCHANGED AND WHAT WAS MODIFIED
 ---------------------------------------------
 Taken from AI output without changes to its substance:

@@ -122,8 +122,10 @@ Operators are listed from **highest** to lowest precedence:
   плюс мінус на ділити чутки`.
   `тіпа` is entirely Cyrillic: `тіпa` with a final Latin `a` is an identifier,
   rather than the keyword.
-- **Integers.** One or more decimal ASCII digits; leading zeros are allowed
-  and length is arbitrary. A literal has no sign: `мінус 5` applies unary minus
+- **Integers.** One or more decimal ASCII digits; leading zeros are allowed.
+  A literal greater than `9223372036854775808` (2^63) is a lexical error at
+  its first digit, because no type can hold it. `9223372036854775808` itself
+  is valid only directly after unary `мінус`. A literal has no sign: `мінус 5` applies unary minus
   to `5`. Digits immediately followed by a letter or `_` (`12abc`, `12_3`,
   `0x1F`) produce a lexical error at the first digit.
 - **Whitespace.** Only space and tab separate tokens. Lines end with LF or
@@ -179,12 +181,13 @@ still produce an AST; see the `deferred_semantics_*` tests.
   `або` take Booleans and short-circuit. A condition must be `базар`. `базарь`
   prints decimal integers and Booleans as `реально` / `гон`. `всьо розходимось`
   takes an integer and exits the entire program.
-- **Integer literals** retain arbitrary precision until type checking. They
+- **Integer literals** keep their exact value until type checking. They
   obtain an integer type from context: a declaration, assignment, or typed
   other operand. An expression of literals with no context defaults to
   `крупняк`.
-- **Overflow checks.** A literal outside its type's range is a compilation
-  error. Minimum values use unary minus (`мінус 2147483648` and
+- **Overflow checks.** The lexer and parser already reject literals that
+  fit no type (see section 4). Beyond that, a literal outside its type's
+  range is a compilation error. Minimum values use unary minus (`мінус 2147483648` and
   `мінус 9223372036854775808`), so range checking follows unary minus.
   Every arithmetic result, including unary negation, is checked. Overflow
   is an error and never wraps. Division truncates toward zero; division
@@ -192,7 +195,7 @@ still produce an AST; see the `deferred_semantics_*` tests.
 
 Semantic checking is deferred rather than mixed into parsing.
 `зуб даю x тіпа дрібняк це 2147483648` matches the grammar, so the parser
-accepts it. Syntax tests cover type and literal spelling errors: missing or
+accepts it; only literals too large for every type are rejected now. Syntax tests cover type and literal spelling errors: missing or
 misspelled types, `12abc`, `0x1F`, `10L`, `12_3`, `1.5`, `-1`, and `+`.
 
 ## 6. Abstract syntax tree

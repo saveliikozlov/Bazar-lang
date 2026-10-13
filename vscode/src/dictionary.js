@@ -21,7 +21,7 @@ const P = {
   comparisonOperator: 'comparison_operator = "рівно" | "не", "рівно" | "більше" | "менше" ;',
   additiveOperator: 'additive_operator = "плюс" | "мінус" ;',
   multiplicativeOperator: 'multiplicative_operator = "на" | "ділити", "на" ;',
-  unary: 'unary = "мінус", unary | primary ;',
+  unary: 'unary = "мінус", ( unary | I64_MIN_MAGNITUDE ) | primary ;',
   boolean: 'boolean_literal = "реально" | "гон" ;',
   comment: 'comment = "чутки", ":", { comment_char } ;',
 };
@@ -239,7 +239,7 @@ const KEYWORDS = [
   },
   {
     id: 'мінус', kind: 'keyword', words: ['мінус'],
-    meaning: "Has two roles: binary subtraction (`-`) after an operand, and unary numeric negation before an operand. Unary minus is right-associative: `мінус мінус x` means `-(-x)`. Integer literals have no sign; `мінус 5` applies unary minus to `5`.",
+    meaning: "Has two roles: binary subtraction (`-`) after an operand, and unary numeric negation before an operand. Unary minus is right-associative: `мінус мінус x` means `-(-x)`. Integer literals have no sign; `мінус 5` applies unary minus to `5`. The literal 9223372036854775808 is allowed only right after unary `мінус`, as the smallest `крупняк` value.",
     productions: [P.additiveOperator, P.unary],
     syntax: 'EXPR мінус EXPR  |  мінус EXPR',
     example: 'базарь 7 мінус 2\nбазарь мінус 5',
