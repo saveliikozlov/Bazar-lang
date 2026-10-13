@@ -48,6 +48,9 @@ test("declarations, types, Booleans, and numbers", async () => {
   assert.strictEqual(b['мутна'], 'keyword.declaration.bazar');
   assert.strictEqual(b['базар'], 'storage.type.bazar');
   assert.strictEqual(b['гон'], 'constant.language.boolean.bazar');
+  const c = await map('желєзобетонно ЛІМІТ тіпа крупняк це 1');
+  assert.strictEqual(c['желєзобетонно'], 'keyword.declaration.bazar');
+  assert.strictEqual(c['ЛІМІТ'], 'variable.other.bazar');
 });
 
 test("keyword prefixes in identifiers are not highlighted as keywords", async () => {

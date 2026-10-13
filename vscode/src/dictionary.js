@@ -7,6 +7,7 @@ const { WORD_CHAR } = require('./positions');
 const NOT_EXECUTED = "The parser currently checks syntax only: values are not evaluated, and types and mutability are not checked. These are intended semantics.";
 
 const P = {
+  constant: 'constant_declaration = "желєзобетонно", IDENT, "тіпа", type, "це", expression ;',
   immutable: 'immutable_declaration = "зуб", "даю", IDENT, "тіпа", type, "це", expression ;',
   mutable: 'mutable_declaration = "мутна", "тєма", IDENT, "тіпа", type, "це", expression ;',
   type: 'type = "дрібняк" | "крупняк" | "базар" ;',
@@ -105,16 +106,24 @@ const PHRASES = [
 
 const KEYWORDS = [
   {
+    id: 'желєзобетонно', kind: 'keyword', words: ['желєзобетонно'],
+    meaning: "Declares a compile-time constant: literally rock-solid, set in reinforced concrete. Equivalent: `const NAME: T = e`. Allowed only at the top level of a program, not inside `якшо реально`. The value is a constant expression: literals, operators, parentheses and earlier constants, but no variables. Unlike `зуб даю`, which may be initialized from any run-time value, a constant's value is known before the program runs.",
+    productions: [P.constant],
+    syntax: "желєзобетонно NAME тіпа TYPE це CONST_EXPR",
+    example: 'желєзобетонно ЛІМІТ тіпа крупняк це 1000 на 1000',
+    semantic: true,
+  },
+  {
     id: 'тіпа', kind: 'keyword', words: ['тіпа'],
-    meaning: "Declaration connector between the variable name and its type. It is used only within `зуб даю` or `мутна тєма`, never by itself.",
-    productions: [P.immutable, P.mutable],
+    meaning: "Declaration connector between the name and its type. It is used only within `желєзобетонно`, `зуб даю` or `мутна тєма`, never by itself.",
+    productions: [P.constant, P.immutable, P.mutable],
     syntax: "зуб даю NAME тіпа TYPE це EXPR",
     example: 'зуб даю x тіпа дрібняк це 1',
   },
   {
     id: 'це', kind: 'keyword', words: ['це'],
-    meaning: "Declaration connector between the type and the initial value. It is used only within `зуб даю` or `мутна тєма`. Assignment uses `тепер` instead.",
-    productions: [P.immutable, P.mutable],
+    meaning: "Declaration connector between the type and the initial value. It is used only within `желєзобетонно`, `зуб даю` or `мутна тєма`. Assignment uses `тепер` instead.",
+    productions: [P.constant, P.immutable, P.mutable],
     syntax: "мутна тєма NAME тіпа TYPE це EXPR",
     example: 'мутна тєма x тіпа дрібняк це 1',
   },

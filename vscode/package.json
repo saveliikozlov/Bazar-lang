@@ -2,7 +2,7 @@
   "name": "bazar",
   "displayName": "Bazar («Базар»)",
   "description": "Syntax highlighting, completion, keyword dictionary, and lexical and syntax error underlines for Bazar.",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "publisher": "bazar-lang",
   "license": "UNLICENSED",
   "private": true,

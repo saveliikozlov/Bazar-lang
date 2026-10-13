@@ -6,8 +6,8 @@ const { getEntry, hoverMarkdown } = require('./dictionary');
 
 const W = `[${WORD_CHAR}]`;
 const COMMENT_START_RE = new RegExp(`(?:^|[^${WORD_CHAR}])чутки:`);
-const DECLARATION_RE = new RegExp(`(?<![${WORD_CHAR}])(?:зуб[ \\t]+даю|мутна[ \\t]+тєма)[ \\t]+([A-Za-z_\\u0401\\u0451\\u0410-\\u044F\\u0406\\u0456\\u0407\\u0457\\u0404\\u0454\\u0490\\u0491][${WORD_CHAR}]*)`, 'g');
-const NEW_NAME_RE = new RegExp(`(?:^|[^${WORD_CHAR}])(?:зуб[ \\t]+даю|мутна[ \\t]+тєма)[ \\t]+[${WORD_CHAR}]*$`);
+const DECLARATION_RE = new RegExp(`(?<![${WORD_CHAR}])(?:желєзобетонно|зуб[ \\t]+даю|мутна[ \\t]+тєма)[ \\t]+([A-Za-z_\\u0401\\u0451\\u0410-\\u044F\\u0406\\u0456\\u0407\\u0457\\u0404\\u0454\\u0490\\u0491][${WORD_CHAR}]*)`, 'g');
+const NEW_NAME_RE = new RegExp(`(?:^|[^${WORD_CHAR}])(?:желєзобетонно|зуб[ \\t]+даю|мутна[ \\t]+тєма)[ \\t]+[${WORD_CHAR}]*$`);
 
 const TYPES = '${2|дрібняк,крупняк,базар|}';
 
@@ -15,6 +15,8 @@ const TYPES = '${2|дрібняк,крупняк,базар|}';
 // words: phrase words used to calculate the replacement range.
 // dict: dictionary entry ID (defaults to label) used for documentation.
 const ENTRIES = [
+  { label: 'желєзобетонно', words: ['желєзобетонно'], kind: 'statement', detail: 'compile-time constant (top level only)',
+    snippet: `желєзобетонно \${1:NAME} тіпа ${TYPES} це \${3:0}` },
   { label: 'зуб даю', words: ['зуб', 'даю'], kind: 'statement', detail: 'immutable variable',
     snippet: `зуб даю \${1:name} тіпа ${TYPES} це \${3:0}` },
   { label: 'мутна тєма', words: ['мутна', 'тєма'], kind: 'statement', detail: 'mutable variable',

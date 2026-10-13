@@ -2,8 +2,8 @@
 
 Bazar is a small programming language with Ukrainian keywords and a surzhyk
 style, as if a cheeky friend were explaining programming beside a garage.
-`зуб даю` declares an immutable variable, `мутна тєма` declares a mutable one,
-and `перевзувся` assigns a new value. Conditions start with `якшо реально`,
+`желєзобетонно` declares a compile-time constant, `зуб даю` an immutable
+variable, `мутна тєма` a mutable one, and `перевзувся` assigns a new value. Conditions start with `якшо реально`,
 may have an `а нє` branch, and end with `отакої`. Source files use `.bazar`.
 
 The compiler reads UTF-8 source, checks lexical and syntactic structure, and
@@ -58,17 +58,42 @@ after `це`.
 
 ### Constants
 
-Bazar has two kinds of constants:
+Bazar distinguishes three kinds of named values, plus literal constants:
+
+| Declaration | Kind | Value known | Can change |
+| --- | --- | --- | --- |
+| `желєзобетонно` | constant (`const`) | at compile time | never |
+| `зуб даю` | immutable variable (`let`) | at run time | never |
+| `мутна тєма` | mutable variable (`let mut`) | at run time | with `перевзувся` |
 
 - **Literal constants**: integer literals (`42`, `2147483647`) and the Boolean
-  literals `реально` and `гон`. Their values are fixed in the source.
-- **Named constants**: `зуб даю` (literally "I swear") binds a name to a value
-  that can never change. It is Bazar's equivalent of `const` / `let`, so the
-  language needs no separate constant keyword.
+  literals `реально` and `гон`.
+- **Named constants**: `желєзобетонно` (literally "set in reinforced
+  concrete") binds a name to a value computed before the program runs. Its
+  initializer is a *constant expression*: literals, operators, parentheses,
+  and constants declared earlier, but no variables. Constants are declared
+  only at the top level of a program, never inside `якшо реально`.
 
 ```text
-зуб даю ліміт тіпа дрібняк це 2147483647
-зуб даю правда тіпа базар це реально
+желєзобетонно ТИСЯЧА тіпа дрібняк це 1000
+желєзобетонно МІЛЬЙОН тіпа крупняк це ТИСЯЧА на ТИСЯЧА
+желєзобетонно ПРАВДА тіпа базар це реально
+```
+
+The parser enforces the top-level rule. Constant and variable names are both
+identifiers, so "no variables in a constant expression" is checked by the
+semantic stage, which also computes the value and checks that it fits the
+declared type.
+
+### Immutable variables
+
+`зуб даю` (literally "I swear") promises that a variable will never be
+reassigned, but its value may come from any expression, including other
+variables:
+
+```text
+зуб даю зарплата тіпа крупняк це 40000
+зуб даю на_руки тіпа крупняк це зарплата мінус ТИСЯЧА
 ```
 
 ### Mutable variables
@@ -286,13 +311,13 @@ python3 check.py
 python3 -m unittest discover -s tests -v
 ```
 
-The fixture runner compares 44 valid programs with expected ASTs, 107 invalid
-programs with expected error lines, and checks 7 examples. It verifies exit
+The fixture runner compares 48 valid programs with expected ASTs, 115 invalid
+programs with expected error lines, and checks 8 examples. It verifies exit
 codes and both output streams, reports each failure, and exits nonzero if any
 check fails. It never rewrites expected files. Missing expectations and orphan
 expectation files without sources are failures.
 
-The 73 unit tests cover UTF-8 validation, byte positions, identifiers
+The 75 unit tests cover UTF-8 validation, byte positions, identifiers
 (including both cases of every Ukrainian letter), keywords, comments, line
 endings, AST structure, operators, nesting, diagnostics, and CLI output.
 They also confirm that semantic violations are accepted when syntax is valid.

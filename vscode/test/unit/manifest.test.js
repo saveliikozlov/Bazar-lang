@@ -41,8 +41,8 @@ test("runtime extension does not depend on repository-root paths", () => {
   }
 });
 
-test("dictionary command is declared and version is 0.2.1", () => {
-  assert.strictEqual(manifest.version, '0.2.1');
+test("dictionary command is declared and version is 0.3.0", () => {
+  assert.strictEqual(manifest.version, '0.3.0');
   const lock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
   assert.strictEqual(lock.version, manifest.version);
   assert.strictEqual(lock.packages[''].version, manifest.version);

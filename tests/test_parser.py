@@ -7,7 +7,8 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ast_nodes import (  # noqa: E402
-    AssignmentNode, ASTNode, BinaryNode, BlockNode, BooleanNode, DeclarationNode,
+    AssignmentNode, ASTNode, BinaryNode, BlockNode, BooleanNode, ConstantDeclarationNode,
+    DeclarationNode,
     ExitNode, ExprNode, IdentifierNode, IfNode, IntegerNode, PrintNode, ProgramNode,
     StmtNode, UnaryNode,
 )
@@ -21,7 +22,7 @@ def parse(source):
 
 class HierarchyTest(unittest.TestCase):
     def test_class_hierarchy(self):
-        for statement in (DeclarationNode, AssignmentNode, IfNode, PrintNode, ExitNode):
+        for statement in (ConstantDeclarationNode, DeclarationNode, AssignmentNode, IfNode, PrintNode, ExitNode):
             self.assertTrue(issubclass(statement, StmtNode))
         for expression in (IntegerNode, BooleanNode, IdentifierNode, UnaryNode, BinaryNode):
             self.assertTrue(issubclass(expression, ExprNode))
@@ -40,6 +41,17 @@ class HierarchyTest(unittest.TestCase):
         self.assertIsInstance(unary, UnaryNode)
         self.assertEqual((unary.operator, unary.line, unary.column), ("neg", 1, 55))
         self.assertEqual((unary.operand.value, unary.operand.column), ("7", 66))
+
+    def test_constant_declaration_fields_and_positions(self):
+        program = parse("желєзобетонно Н тіпа крупняк це Н2 на 2")
+        constant = program.statements[0]
+        self.assertIsInstance(constant, ConstantDeclarationNode)
+        self.assertNotIsInstance(constant, DeclarationNode)
+        self.assertEqual((constant.name, constant.declared_type), ("Н", "i64"))
+        self.assertEqual((constant.line, constant.column), (1, 1))
+        self.assertEqual(constant.initializer.operator, "mul")
+        self.assertEqual(constant.dump().splitlines()[0],
+                         "ConstantDeclarationNode line=1 column=1 name=Н type=i64")
 
     def test_type_words_map_to_canonical_names(self):
         for word, canonical in (("дрібняк", "i32"), ("крупняк", "i64"), ("базар", "bool")):
@@ -269,6 +281,14 @@ class BoundaryTest(unittest.TestCase):
                 with self.assertRaises(CompilationError):
                     parse(source)
 
+    def test_constants_only_at_top_level(self):
+        message = "тільки на верхньому рівні"
+        self.assert_error("якшо реально реально\n желєзобетонно X тіпа дрібняк це 1\nотакої", 2, 2, message)
+        self.assert_error("якшо реально гон\n базарь 1\nа нє\n желєзобетонно X тіпа дрібняк це 1\nотакої",
+                          4, 2, message)
+        program = parse("желєзобетонно X тіпа дрібняк це 1\nякшо реально X більше 0\n базарь X\nотакої")
+        self.assertIsInstance(program.statements[0], ConstantDeclarationNode)
+
     def test_reserved_words_cannot_be_names(self):
         self.assert_error("зуб даю базар тіпа базар це гон", 1, 15, "зарезервоване слово")
         self.assert_error("перевзувся гон тепер 1", 1, 22, "зарезервоване слово")
@@ -278,7 +298,10 @@ class BoundaryTest(unittest.TestCase):
         for source in ("зуб даю x тіпа дрібняк це 2147483648\nперевзувся x тепер 1",
                        "якшо реально 1\n базарь невідомий\nотакої",
                        "зуб даю b тіпа базар це 1 плюс реально",
-                       "всьо розходимось гон\nбазарь 1"):
+                       "всьо розходимось гон\nбазарь 1",
+                       # constant initialized from a variable; assignment to a constant
+                       "зуб даю x тіпа дрібняк це 1\nжелєзобетонно Y тіпа дрібняк це x",
+                       "желєзобетонно Y тіпа дрібняк це 1\nперевзувся Y тепер 2"):
             with self.subTest(source=source):
                 parse(source)
 

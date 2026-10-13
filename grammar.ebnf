@@ -30,8 +30,22 @@
    directly at EOF (the final LF is optional). Statements cannot share a
    line: each repetition below starts with NEWLINE. *)
 program = { NEWLINE },
-          [ statement, { NEWLINE, [ statement ] } ],
+          [ top_statement, { NEWLINE, [ top_statement ] } ],
           EOF ;
+
+(* Constants may only be declared at the top level of a program, never
+   inside a condition block, so "block" below uses "statement". *)
+top_statement = constant_declaration
+              | statement ;
+
+(* "желєзобетонно" (literally "reinforced-concrete sure") declares a
+   compile-time constant. Its initializer is a constant expression: it
+   follows the ordinary expression syntax, but it may use only literals,
+   operators, parentheses, and names of constants declared earlier. Because
+   a constant name and a variable name are both IDENT, the restriction on
+   names is checked by the semantic analysis stage, which also evaluates
+   the value at compile time and checks that it fits the declared type. *)
+constant_declaration = "желєзобетонно", IDENT, "тіпа", type, "це", expression ;
 
 statement = immutable_declaration
           | mutable_declaration
@@ -40,7 +54,8 @@ statement = immutable_declaration
           | exit_statement
           | if_statement ;
 
-(* "зуб даю" declares an immutable variable. *)
+(* "зуб даю" declares an immutable variable: it is assigned exactly once,
+   but its initializer may be any expression evaluated at run time. *)
 immutable_declaration = "зуб", "даю", IDENT, "тіпа", type, "це", expression ;
 
 (* "мутна тєма" declares a mutable variable. *)
@@ -218,7 +233,8 @@ digit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
    "чутки" is also reserved but emits no token: it starts a comment or causes
    an error. Former Russian keywords are no longer reserved; those matching
    identifier rules are ordinary identifiers. *)
-keyword = "зуб" | "даю" | "мутна" | "тєма" | "тіпа" | "це"
+keyword = "желєзобетонно"
+        | "зуб" | "даю" | "мутна" | "тєма" | "тіпа" | "це"
         | "дрібняк" | "крупняк" | "базар"
         | "перевзувся" | "тепер" | "базарь" | "всьо" | "розходимось"
         | "якшо" | "реально" | "а" | "нє" | "отакої"

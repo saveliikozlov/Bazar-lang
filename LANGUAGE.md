@@ -17,6 +17,7 @@ lines; its `а нє` and `отакої` each occupy a separate line.
 
 | Form | Meaning | Equivalent |
 | --- | --- | --- |
+| `желєзобетонно NAME тіпа TYPE це EXPR` | compile-time constant, top level only; literally set in reinforced concrete | `const NAME: T = e` |
 | `зуб даю NAME тіпа TYPE це EXPR` | immutable variable; literally a promise | `let name: T = e` |
 | `мутна тєма NAME тіпа TYPE це EXPR` | mutable variable; literally a shady business | `let mut name: T = e` |
 | `перевзувся NAME тепер EXPR` | assignment; literally changed shoes or position | `name = e` |
@@ -116,7 +117,7 @@ Operators are listed from **highest** to lowest precedence:
   at the apostrophe. The typographic `’` (U+2019) is not accepted.
   Unicode normalization is not performed.
 - **Reserved words** are the individual words of every phrase:
-  `зуб даю мутна тєма тіпа це дрібняк крупняк базар перевзувся тепер базарь
+  `желєзобетонно зуб даю мутна тєма тіпа це дрібняк крупняк базар перевзувся тепер базарь
   всьо розходимось якшо реально а нє отакої гон або і ше рівно не більше менше
   плюс мінус на ділити чутки`.
   `тіпа` is entirely Cyrillic: `тіпa` with a final Latin `a` is an identifier,
@@ -161,8 +162,14 @@ still produce an AST; see the `deferred_semantics_*` tests.
   is an error. An initializer cannot see the name being declared. The program
   is one scope; each if/else block introduces a child scope. Names declared
   inside a block are invisible outside it; shadowing an outer name is allowed.
+- **Constants.** The initializer of `желєзобетонно` is a constant
+  expression: it may use literals, operators, parentheses, and names of
+  constants declared earlier, but not variables. Its value is computed at
+  compile time, and the result must fit the declared type. A constant can
+  never be assigned. (The parser already enforces that constants are
+  declared only at the top level, outside `якшо реально`.)
 - **Mutability.** `перевзувся` may assign only to a `мутна тєма` variable.
-  Assignment to a `зуб даю` variable is an error, with the intended diagnostic
+  Assignment to a `желєзобетонно` constant or a `зуб даю` variable is an error, with the intended diagnostic
   «Ти за 'x' зуб дав. Перевзуватись нема чого.».
 - **Types.** Initializers and assigned values must exactly match the variable's
   type. No implicit conversion exists between `дрібняк`, `крупняк`, and `базар`.
@@ -195,6 +202,7 @@ ASTNode(line, column)
 ├── ProgramNode(statements)
 ├── BlockNode(statements)                  IfNode branch body
 ├── StmtNode
+│   ├── ConstantDeclarationNode(name, declared_type, initializer)
 │   ├── DeclarationNode(name, declared_type, mutable, initializer)
 │   ├── AssignmentNode(name, value)
 │   ├── IfNode(condition, then_body, else_body)   else_body may be None
@@ -208,7 +216,7 @@ ASTNode(line, column)
     └── BinaryNode(operator, left, right)  add sub mul div eq ne gt lt and or
 ```
 
-Statements are positioned at their first keyword (`зуб`, `мутна`, `перевзувся`,
+Statements are positioned at their first keyword (`желєзобетонно`, `зуб`, `мутна`, `перевзувся`,
 `базарь`, `всьо`, `якшо`). Operators are positioned at their first word (`не`
 in `не рівно`, `ділити` in `ділити на`, `і` in `і ше`). Literals and names use
 their own token positions; a block uses its first statement. The program uses

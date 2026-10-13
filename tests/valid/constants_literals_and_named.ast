@@ -1,22 +1,22 @@
 ProgramNode line=2 column=1
-  DeclarationNode line=2 column=1 name=ліміт type=i32 mutable=false
+  ConstantDeclarationNode line=2 column=1 name=ЛІМІТ type=i32
     initializer:
-      IntegerNode line=2 column=55 value=2147483647
-  DeclarationNode line=3 column=1 name=мінімум type=i64 mutable=false
+      IntegerNode line=2 column=68 value=2147483647
+  ConstantDeclarationNode line=3 column=1 name=МІНІМУМ type=i64
     initializer:
-      UnaryNode line=3 column=59 operator=neg
+      UnaryNode line=3 column=72 operator=neg
         operand:
-          IntegerNode line=3 column=70 value=9223372036854775808
-  DeclarationNode line=4 column=1 name=правда type=bool mutable=false
+          IntegerNode line=3 column=83 value=9223372036854775808
+  ConstantDeclarationNode line=4 column=1 name=ПРАВДА type=bool
     initializer:
-      BooleanNode line=4 column=53 value=true
-  DeclarationNode line=5 column=1 name=брехня type=bool mutable=false
+      BooleanNode line=4 column=66 value=true
+  ConstantDeclarationNode line=5 column=1 name=БРЕХНЯ type=bool
     initializer:
-      BooleanNode line=5 column=53 value=false
+      BooleanNode line=5 column=66 value=false
   PrintNode line=6 column=1
     value:
       BinaryNode line=6 column=25 operator=add
         left:
-          IdentifierNode line=6 column=14 name=ліміт
+          IdentifierNode line=6 column=14 name=ЛІМІТ
         right:
           IntegerNode line=6 column=34 value=0

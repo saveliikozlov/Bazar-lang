@@ -29,6 +29,29 @@ in [tests/valid](tests/valid) and [tests/invalid](tests/invalid).
 
 All money variables have type `крупняк`: there is no implicit narrowing from `i64` to `i32`.
 
+### Constants, immutable and mutable variables — [examples/constants.bazar](examples/constants.bazar)
+
+```text
+чутки: constants are set in reinforced concrete before the program runs
+
+желєзобетонно ТИЖДЕНЬ тіпа дрібняк це 7
+желєзобетонно ДОБА_ГОДИН тіпа дрібняк це 24
+желєзобетонно ТИЖДЕНЬ_ГОДИН тіпа дрібняк це ТИЖДЕНЬ на ДОБА_ГОДИН
+
+зуб даю відпрацьовано тіпа дрібняк це 50
+мутна тєма переробка тіпа дрібняк це 0
+
+якшо реально відпрацьовано більше ТИЖДЕНЬ_ГОДИН ділити на 4
+    перевзувся переробка тепер відпрацьовано мінус ТИЖДЕНЬ_ГОДИН ділити на 4
+отакої
+
+базарь переробка
+```
+
+`ТИЖДЕНЬ_ГОДИН` is computed from two earlier constants before the program runs.
+`відпрацьовано` is an immutable variable and `переробка` a mutable one.
+Constants are declared only at the top level, outside `якшо реально`.
+
 ### Other types and logic — [examples/types_and_logic.bazar](examples/types_and_logic.bazar)
 
 ```text
@@ -118,6 +141,7 @@ reserved. `мелочь` is a word from the former vocabulary, now an ordinary n
 | `зуб даю ок тіпа базар це 1 менше 2 менше 3` | `line 1:60: Порівняння в ланцюжок не ліпи: з'єднай їх через «і ше» / «або» або візьми дужки.` |
 | `зуб даю x тіпа дрібняк це 12abc` | `line 1:46: Число з буквами? Не мути: після цифр букви й '_' не ліплять.` |
 | `базарь 1 плюс` + newline + `2` | `line 1:24: Де значення? Тут має бути число, «реально», «гон», ім'я або «(», а не кінець рядка.` |
+| `желєзобетонно X тіпа дрібняк це 1` on the second line inside a condition | `line 2:5: Константа «желєзобетонно» оголошується тільки на верхньому рівні програми, а не всередині «якшо реально».` |
 | `зуб даю x тіпа дрібняк це 1 + 2` | `line 1:48: Шо за символ '+'? Такого в нашому базарі нема.` |
 | `а нє базарь 2` on the third line inside a condition | `line 3:9: «А нє» займає цілий рядок: після «нє» чекаю кінець рядка, а тут «базарь».` |
 | `зуб даю x тіпa дрібняк це 1` (Latin `a`) | `line 1:17: Де «тіпа», шеф? … ім'я «тіпa» (латинську літеру підсунули замість кириличної: треба «тіпа» суто кирилицею).` |
@@ -137,6 +161,20 @@ AST. Semantic analysis is intended to reject them.
 ```
 
 Assignment to an immutable variable.
+
+```text
+зуб даю x тіпа дрібняк це 1
+желєзобетонно Y тіпа дрібняк це x плюс 1
+```
+
+A constant initialized from a variable: its value is not known at compile time.
+
+```text
+желєзобетонно ЛІМІТ тіпа дрібняк це 10
+перевзувся ЛІМІТ тепер 20
+```
+
+Assignment to a constant.
 
 ```text
 зуб даю x тіпа дрібняк це 2147483648

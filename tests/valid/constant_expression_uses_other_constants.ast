@@ -1,0 +1,39 @@
+ProgramNode line=2 column=1
+  ConstantDeclarationNode line=2 column=1 name=ТИСЯЧА type=i32
+    initializer:
+      IntegerNode line=2 column=70 value=1000
+  ConstantDeclarationNode line=3 column=1 name=МІЛЬЙОН type=i64
+    initializer:
+      BinaryNode line=3 column=85 operator=mul
+        left:
+          IdentifierNode line=3 column=72 name=ТИСЯЧА
+        right:
+          IdentifierNode line=3 column=90 name=ТИСЯЧА
+  ConstantDeclarationNode line=4 column=1 name=ЗНИЖКА type=i32
+    initializer:
+      UnaryNode line=4 column=70 operator=neg
+        operand:
+          BinaryNode line=4 column=116 operator=add
+            left:
+              BinaryNode line=4 column=95 operator=div
+                left:
+                  IdentifierNode line=4 column=82 name=ТИСЯЧА
+                right:
+                  IntegerNode line=4 column=113 value=10
+            right:
+              IntegerNode line=4 column=125 value=5
+  ConstantDeclarationNode line=5 column=1 name=ВЕЛИКО type=bool
+    initializer:
+      BinaryNode line=5 column=107 operator=and
+        left:
+          BinaryNode line=5 column=81 operator=gt
+            left:
+              IdentifierNode line=5 column=66 name=МІЛЬЙОН
+            right:
+              IdentifierNode line=5 column=94 name=ТИСЯЧА
+        right:
+          BinaryNode line=5 column=128 operator=ne
+            left:
+              IdentifierNode line=5 column=115 name=ЗНИЖКА
+            right:
+              IntegerNode line=5 column=144 value=0

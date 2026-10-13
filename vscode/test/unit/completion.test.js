@@ -10,7 +10,7 @@ const at = (prefix, text = prefix) => complete(prefix, text, prefix.length);
 
 test("empty prefix offers all language constructs", () => {
   const found = labels(at(''));
-  for (const expected of ['зуб даю', 'мутна тєма', 'перевзувся … тепер', 'якшо реально', 'а нє', 'отакої', 'базарь',
+  for (const expected of ['желєзобетонно', 'зуб даю', 'мутна тєма', 'перевзувся … тепер', 'якшо реально', 'а нє', 'отакої', 'базарь',
     'всьо розходимось', 'чутки:', 'тіпа', 'це', 'дрібняк', 'крупняк', 'базар', 'реально', 'гон', 'плюс', 'мінус', 'на',
     'ділити на', 'рівно', 'не рівно', 'більше', 'менше', 'і ше', 'або']) {
     assert.ok(found.includes(expected), `missing ${expected}`);
@@ -81,6 +81,12 @@ test("declared names exclude comments and the name being declared", () => {
   // suppress variable suggestions while a new name is being declared
   const decl = 'зуб даю баланс тіпа дрібняк це 1\nзуб даю ба';
   assert.ok(!labels(complete('зуб даю ба', decl, decl.length)).includes('баланс'));
+});
+
+test("constant names are offered after declaration", () => {
+  const text = 'желєзобетонно ЛІМІТ тіпа дрібняк це 10\nбазарь ЛІ';
+  assert.deepStrictEqual(declaredNames(text, -1), ['ЛІМІТ']);
+  assert.ok(labels(complete('базарь ЛІ', text, text.length)).includes('ЛІМІТ'));
 });
 
 test("a partially typed declaration name does not suggest itself", () => {

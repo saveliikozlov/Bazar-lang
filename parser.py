@@ -9,7 +9,7 @@ the final byte.
 """
 
 from ast_nodes import (
-    AssignmentNode, BinaryNode, BlockNode, BooleanNode, DeclarationNode,
+    AssignmentNode, BinaryNode, BlockNode, BooleanNode, ConstantDeclarationNode, DeclarationNode,
     ExitNode, IdentifierNode, IfNode, IntegerNode, PrintNode, ProgramNode,
     UnaryNode,
 )
@@ -123,19 +123,28 @@ class Parser:
         first = self.peek()
         statements = []
         if not self.at(EOF):
-            statements.append(self.parse_statement())
+            statements.append(self.parse_top_statement())
             while self.at(NEWLINE):
                 self.eat()
                 if not self.at(NEWLINE) and not self.at(EOF):
-                    statements.append(self.parse_statement())
+                    statements.append(self.parse_top_statement())
             if not self.at(EOF):
                 raise self.error(f"Після інструкції чекаю кінець рядка, а тут {describe(self.peek())}. "
                                  f"Одна інструкція — один рядок.")
         return ProgramNode(first.line, first.column, statements)
 
+    def parse_top_statement(self):
+        # top_statement = constant_declaration | statement
+        if self.at_keyword("желєзобетонно"):
+            return self.parse_constant_declaration()
+        return self.parse_statement()
+
     def parse_statement(self):
         token = self.peek()
         if token.kind == KEYWORD:
+            if token.text == "желєзобетонно":
+                raise self.error("Константа «желєзобетонно» оголошується тільки на верхньому рівні "
+                                 "програми, а не всередині «якшо реально».")
             if token.text == "зуб":
                 return self.parse_immutable_declaration()
             if token.text == "мутна":
@@ -158,6 +167,13 @@ class Parser:
         raise self.unexpected("інструкцію: оголошення, «перевзувся», «якшо реально», "
                               "«базарь» або «всьо розходимось»")
 
+    def parse_constant_declaration(self):
+        # "желєзобетонно", IDENT, "тіпа", type, "це", expression
+        first = self.eat()
+        name, declared_type, initializer = self.parse_declaration_parts("«желєзобетонно»")
+        return ConstantDeclarationNode(first.line, first.column, name.text,
+                                       declared_type, initializer)
+
     def parse_immutable_declaration(self):
         # "зуб", "даю", IDENT, "тіпа", type, "це", expression
         first = self.eat()
@@ -171,14 +187,17 @@ class Parser:
         return self.parse_declaration_rest(first, "«мутна тєма»", mutable=True)
 
     def parse_declaration_rest(self, first, phrase, mutable):
+        name, declared_type, initializer = self.parse_declaration_parts(phrase)
+        return DeclarationNode(first.line, first.column, name.text,
+                               declared_type, mutable, initializer)
+
+    def parse_declaration_parts(self, phrase):
         """Shared declaration suffix: IDENT, тіпа, type, це, expression."""
         name = self.expect_name(phrase)
         self.expect_keyword("тіпа", f"Де «тіпа», шеф? Після «{name.text}» треба вказати тип, а тут {{found}}.")
         declared_type = self.parse_type()
         self.expect_keyword("це", "Де «це»? Після типу чекаю «це» і початкове значення, а тут {found}.")
-        initializer = self.parse_expression()
-        return DeclarationNode(first.line, first.column, name.text,
-                               declared_type, mutable, initializer)
+        return name, declared_type, self.parse_expression()
 
     def parse_type(self):
         # type = "дрібняк" | "крупняк" | "базар"

@@ -9,7 +9,7 @@ root `README.md`.
 - **Highlighting.** Keywords, types, Booleans, operators, numbers, parentheses,
   and `чутки:` comments have distinct scopes. Matching uses complete words:
   `дрібняк_2` and `базарний` are not highlighted as keywords.
-- **Completion.** Phrases and constructs (`зуб даю`, `мутна тєма`,
+- **Completion.** Phrases and constructs (`желєзобетонно`, `зуб даю`, `мутна тєма`,
   `якшо реально` with `а нє` and `отакої`, `базарь`, `всьо розходимось`,
   operators, and types) are offered as snippets with defaults. Suggestions
   work with Cyrillic input and Ctrl+Space. A partial phrase such as `зуб д`

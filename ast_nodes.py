@@ -125,6 +125,20 @@ class DeclarationNode(StmtNode):
 
 
 @dataclass
+class ConstantDeclarationNode(StmtNode):
+    """Compile-time constant: желєзобетонно NAME тіпа TYPE це EXPR (top level only)."""
+    name: str
+    declared_type: str  # canonical: "i32", "i64", or "bool"
+    initializer: ExprNode
+
+    def attributes(self):
+        return (("name", self.name), ("type", self.declared_type))
+
+    def labelled_children(self):
+        return (("initializer", self.initializer),)
+
+
+@dataclass
 class AssignmentNode(StmtNode):
     """Assignment syntax: перевзувся NAME тепер EXPR."""
     name: str
