@@ -8,11 +8,12 @@
 
    The grammar has two layers.
    1. The LEXICAL grammar below converts source bytes into keyword tokens,
-      IDENT, INTEGER, "(", ")", NEWLINE, and one EOF. Horizontal whitespace
+      IDENT, INTEGER, STRING, "(", ")", ",", ".", NEWLINE, and one EOF. Horizontal whitespace
       and comments are skipped and never reach the parser.
    2. The SYNTACTIC grammar above that layer operates on the resulting tokens.
       A quoted Cyrillic word such as "зуб" denotes that exact keyword token.
-      Each word in a multiword phrase ("зуб", "даю"; "а", "нє"; "і", "ше")
+      Each word in a multiword phrase ("зуб", "даю"; "а", "нє"; "і", "ше";
+      "маю", "дєло"; "на", "виході"; "такі", "діла"; "ану", "кажи")
       is a separate token. Spaces and tabs may separate phrase words, but
       NOT newlines: phrases, simple statements, and expressions each occupy
       one physical line.
@@ -33,9 +34,13 @@ program = { NEWLINE },
           [ top_statement, { NEWLINE, [ top_statement ] } ],
           EOF ;
 
-(* Constants may only be declared at the top level of a program, never
-   inside a condition block, so "block" below uses "statement". *)
+(* Constants, functions, and structures may only be declared at the top
+   level of a program, never inside a condition block or a body, so "block"
+   below uses "statement". Top-level statements other than declarations form
+   the main program; they run in order, from top to bottom. *)
 top_statement = constant_declaration
+              | function_declaration
+              | structure_declaration
               | statement ;
 
 (* "желєзобетонно" (literally "reinforced-concrete sure") declares a
@@ -47,11 +52,16 @@ top_statement = constant_declaration
    the value at compile time and checks that it fits the declared type. *)
 constant_declaration = "желєзобетонно", IDENT, "тіпа", type, "це", expression ;
 
+(* "тримай" is accepted by the grammar everywhere a statement is, but the
+   semantic stage allows it only inside a function body, and allows
+   "всьо розходимось" only outside one. *)
 statement = immutable_declaration
           | mutable_declaration
           | assignment
           | print_statement
           | exit_statement
+          | return_statement
+          | call_statement
           | if_statement ;
 
 (* "зуб даю" declares an immutable variable: it is assigned exactly once,
@@ -61,18 +71,29 @@ immutable_declaration = "зуб", "даю", IDENT, "тіпа", type, "це", exp
 (* "мутна тєма" declares a mutable variable. *)
 mutable_declaration = "мутна", "тєма", IDENT, "тіпа", type, "це", expression ;
 
-(* дрібняк = i32, крупняк = i64, базар = bool *)
-type = "дрібняк" | "крупняк" | "базар" ;
+(* дрібняк = i32, крупняк = i64, базар = bool. An IDENT names a structure
+   declared with "такі діла"; the semantic stage checks that it exists. *)
+type = "дрібняк" | "крупняк" | "базар" | IDENT ;
 
-(* "перевзувся" assigns to an existing variable. *)
-assignment = "перевзувся", IDENT, "тепер", expression ;
+(* "перевзувся" assigns to an existing variable, or to a field reached
+   through a chain of field names: "перевзувся к.центр.х тепер 5". A place
+   never contains a call. *)
+assignment = "перевзувся", place, "тепер", expression ;
+place = IDENT, { ".", IDENT } ;
 
-(* "базарь" prints a value. *)
-print_statement = "базарь", expression ;
+(* "базарь" prints a value or a string literal. *)
+print_statement = "базарь", ( STRING | expression ) ;
 
 (* "всьо розходимось" exits with an expression result. It is optional and
    allowed wherever a statement is allowed. *)
 exit_statement = "всьо", "розходимось", expression ;
+
+(* "тримай" ("here, hold it") leaves the current function with a value. *)
+return_statement = "тримай", expression ;
+
+(* A call made for its effect stands on its own line. The chain must END
+   in a call: "п.посунь(1)" and "порахуй()" are statements, "п.х" is not. *)
+call_statement = IDENT, { [ arguments ], ".", IDENT }, arguments ;
 
 (* "якшо реально" ... "отакої".
    The condition ends its line; "а нє" and "отакої" each occupy a separate
@@ -88,10 +109,47 @@ if_statement = "якшо", "реально", expression, NEWLINE,
 (* A block is a nonempty sequence of statements. EVERY statement inside
    a block, including nested if_statement, ends with NEWLINE. Blank and
    comment-only lines may occur anywhere. A block ends when the parser sees
-   "а" or "отакої" at line start. Indentation is ignored as horizontal space. *)
+   "а", "отакої", or "порішали" at line start. Indentation is ignored as
+   horizontal space. *)
 block = { NEWLINE },
         statement, NEWLINE,
         { NEWLINE | ( statement, NEWLINE ) } ;
+
+
+(* ---- Functions and structures ---- *)
+
+(* "маю дєло" ("I have a business") declares a function: a name, typed
+   parameters in parentheses, and "на виході" ("at the output") with the
+   result type. The header occupies one line; "порішали" ("settled")
+   closes the body on its own line. Inside "такі діла" the same rule
+   declares a member function. *)
+function_declaration = "маю", "дєло", IDENT,
+                       "(", [ parameter, { ",", parameter } ], ")",
+                       "на", "виході", type, NEWLINE,
+                       block,
+                       "порішали" ;
+
+parameter = IDENT, "тіпа", type ;
+
+(* "такі діла" ("such are the things") declares a structure. Its body
+   lists fields and member functions in any order, one per line, and ends
+   with "порішали". A field is declared like a variable but without "це":
+   "зуб даю" makes a constant field, "мутна тєма" a mutable one. Field
+   order is the declaration order. *)
+structure_declaration = "такі", "діла", IDENT, NEWLINE,
+                        { NEWLINE },
+                        member, NEWLINE,
+                        { NEWLINE | ( member, NEWLINE ) },
+                        "порішали" ;
+
+member = field_declaration
+       | function_declaration ;
+
+field_declaration = ( "зуб", "даю" | "мутна", "тєма" ), IDENT, "тіпа", type ;
+
+(* Arguments of a call or of "склепай": expressions separated by commas,
+   on the same line as the opening parenthesis. *)
+arguments = "(", [ expression, { ",", expression } ], ")" ;
 
 
 (* ---- Expressions: lowest to highest precedence ---- *)
@@ -135,8 +193,21 @@ unary = "мінус", ( unary | I64_MIN_MAGNITUDE )
    parentheses, or after binary "мінус") it is a syntax error. *)
 primary = SMALL_INTEGER
         | boolean_literal
-        | IDENT
+        | read_expression
+        | object_creation
+        | chain
         | "(", expression, ")" ;
+
+(* "ану кажи" ("come on, tell") reads one integer from standard input. *)
+read_expression = "ану", "кажи" ;
+
+(* "склепай" ("knock together") creates an object: a structure name and
+   one argument per field, in field order. *)
+object_creation = "склепай", IDENT, arguments ;
+
+(* A name, optionally called, followed by any number of field accesses
+   and member calls: "х", "порахуй(1, 2)", "к.центр.х", "п.д2()". *)
+chain = IDENT, [ arguments ], { ".", IDENT, [ arguments ] } ;
 
 (* реально = true, гон = false *)
 boolean_literal = "реально" | "гон" ;
@@ -168,7 +239,7 @@ boolean_literal = "реально" | "гон" ;
 
 lexical_input = { horizontal_space | comment | NEWLINE | lexeme }, EOF ;
 
-lexeme = keyword | IDENT | INTEGER | "(" | ")" ;
+lexeme = keyword | IDENT | INTEGER | STRING | "(" | ")" | "," | "." ;
 
 (* ---- Separators ---- *)
 horizontal_space = SPACE | TAB ;
@@ -243,7 +314,9 @@ keyword = "желєзобетонно"
         | "перевзувся" | "тепер" | "базарь" | "всьо" | "розходимось"
         | "якшо" | "реально" | "а" | "нє" | "отакої"
         | "гон" | "або" | "і" | "ше" | "рівно" | "не" | "більше" | "менше"
-        | "плюс" | "мінус" | "на" | "ділити" ;
+        | "плюс" | "мінус" | "на" | "ділити"
+        | "маю" | "дєло" | "виході" | "тримай" | "порішали"
+        | "такі" | "діла" | "склепай" | "ану" | "кажи" ;
 
 reserved_word = keyword | "чутки" ;
 
@@ -264,6 +337,24 @@ INTEGER = SMALL_INTEGER | I64_MIN_MAGNITUDE ;
 SMALL_INTEGER = ? digit, { digit } with value 0 … 9223372036854775807 ? ;
 I64_MIN_MAGNITUDE = ? digit, { digit } with value 9223372036854775808 ? ;
 
-(* Any other character outside comments produces a lexical error, including
-   "+", "-", "=", ";", ":", '"', emoji, disallowed letters such as "é" or "Љ",
-   and control characters. *)
+(* ---- Punctuation ----
+   "," separates parameters and arguments; "." reaches a field or a member
+   function. Spaces may surround both: "п . х" is the same as "п.х". After
+   digits, "." is a separate token, so "1.5" is a syntax error, not a
+   number. *)
+
+(* ---- String literals ----
+   A string literal occurs only as the operand of "базарь". It is written
+   between double quotes on one line and may hold any Unicode scalar except
+   LF, CR, '"', and "\". Three escapes write LF, the quote, and the backslash:
+   "\n" is LF, '\"' is a double quote, "\\" is a backslash. A backslash
+   before any other character, a line end before the closing quote, and EOF
+   before it are lexical errors. *)
+STRING = '"', { string_char | escape }, '"' ;
+string_char = ? any Unicode scalar (valid UTF-8 as defined above), except
+                U+000A LF, U+000D CR, U+0022 '"', and U+005C "\" ? ;
+escape = "\", ( "n" | '"' | "\" ) ;
+
+(* Any other character outside comments and string literals produces a
+   lexical error, including "+", "-", "=", ";", ":", emoji, disallowed
+   letters such as "é" or "Љ", and control characters. *)
