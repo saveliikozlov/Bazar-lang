@@ -7,13 +7,14 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from lexer import (  # noqa: E402
-    EOF, IDENT, INTEGER, KEYWORD, KEYWORDS, LPAREN, NEWLINE, NEWLINE_TEXT, RPAREN,
-    LexError, Token, lex,
+    COMMA, DOT, EOF, IDENT, INTEGER, KEYWORD, KEYWORDS, LPAREN, NEWLINE, NEWLINE_TEXT, RPAREN,
+    STRING, LexError, Token, lex,
 )
 
 NEW_KEYWORDS = ("желєзобетонно зуб даю мутна тєма тіпа це дрібняк крупняк базар перевзувся тепер базарь "
                 "всьо розходимось якшо реально а нє отакої гон або і ше рівно не більше "
-                "менше плюс мінус на ділити").split()
+                "менше плюс мінус на ділити "
+                "маю дєло виході тримай порішали такі діла склепай ану кажи").split()
 
 # Former Russian vocabulary absent from the new keywords is deliberately
 # retained here to verify that these words are now ordinary identifiers.
@@ -222,10 +223,35 @@ class TokenTest(unittest.TestCase):
         self.assertEqual(lex(b"x12")[0], Token(IDENT, "x12", 1, 1))
 
     def test_rejects_other_characters(self):
-        for bad in "+-*/=!<>;:,.\"'{}[]\x00\x0b\x0c\x7f":
+        for bad in "+-*/=!<>;:\"'{}[]\x00\x0b\x0c\x7f":
             with self.subTest(bad=bad):
                 with self.assertRaises(LexError):
                     lex(bad.encode())
+
+
+
+class StageTwoTokenTest(unittest.TestCase):
+    def test_comma_and_dot(self):
+        self.assertEqual(kinds("п.х(1, 2)".encode()),
+                         [IDENT, DOT, IDENT, LPAREN, INTEGER, COMMA, INTEGER, RPAREN, EOF])
+        tokens = lex("п . х".encode())
+        self.assertEqual([(t.kind, t.column) for t in tokens[:3]], [(IDENT, 1), (DOT, 4), (IDENT, 6)])
+
+    def test_string_value_has_escapes_resolved(self):
+        token = lex('базарь "а\\"б\\\\в\\nг"'.encode())[1]
+        self.assertEqual(token, Token(STRING, 'а"б\\в\nг', 1, 14))
+
+    def test_string_may_hold_any_scalar_but_line_end(self):
+        self.assertEqual(lex('"чутки: 😎 + - ; {}"'.encode())[0].text, "чутки: 😎 + - ; {}")
+        self.assertEqual(lex(b'""')[0], Token(STRING, "", 1, 1))
+
+    def test_string_errors(self):
+        for source, column in (('"без кінця', 1), ('"рядок\nдалі"', 1),
+                               ('"таб\\t"', 8), ('"кінець\\', 14)):
+            with self.subTest(source=source):
+                with self.assertRaises(LexError) as context:
+                    lex(source.encode())
+                self.assertEqual(context.exception.column, column)
 
 
 if __name__ == "__main__":

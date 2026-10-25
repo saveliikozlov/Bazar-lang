@@ -7,10 +7,11 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ast_nodes import (  # noqa: E402
-    AssignmentNode, ASTNode, BinaryNode, BlockNode, BooleanNode, ConstantDeclarationNode,
-    DeclarationNode,
-    ExitNode, ExprNode, IdentifierNode, IfNode, IntegerNode, PrintNode, ProgramNode,
-    StmtNode, UnaryNode,
+    AssignmentNode, ASTNode, BinaryNode, BlockNode, BooleanNode, CallNode, CallStatementNode,
+    ConstantDeclarationNode, DeclarationNode,
+    ExitNode, ExprNode, FieldAccessNode, FieldAssignmentNode, FunctionNode, IdentifierNode, IfNode,
+    IntegerNode, MemberCallNode, NewObjectNode, PrintNode, ProgramNode, ReadNode, ReturnNode,
+    StmtNode, StringNode, StructureNode, UnaryNode,
 )
 from lexer import KEYWORDS, LexError, lex  # noqa: E402
 from parser import MAX_NESTING, CompilationError, Parser, parse_program  # noqa: E402
@@ -334,6 +335,71 @@ class BoundaryTest(unittest.TestCase):
         nested_ifs = "якшо реально a\n" * (depth + 1) + "базарь 1\n" + "отакої\n" * (depth + 1)
         self.assert_error(nested_ifs, depth + 1, 1, "ліміт компілятора")
         parse("якшо реально a\n" * depth + "базарь 1\n" + "отакої\n" * depth)
+
+
+
+class StageTwoParserTest(unittest.TestCase):
+    def test_function_header(self):
+        function = parse("маю дєло ф(х тіпа дрібняк, п тіпа Точка) на виході базар\n"
+                         "    тримай реально\nпорішали").statements[0]
+        self.assertIsInstance(function, FunctionNode)
+        self.assertEqual((function.name, function.result_type), ("ф", "bool"))
+        self.assertEqual([(p.name, p.declared_type) for p in function.parameters],
+                         [("х", "i32"), ("п", "Точка")])
+        self.assertIsInstance(function.body.statements[0], ReturnNode)
+
+    def test_structure_members_keep_order_and_index(self):
+        structure = parse("такі діла Т\n    мутна тєма а1 тіпа дрібняк\n"
+                          "    маю дєло ф() на виході дрібняк\n        тримай а1\n    порішали\n"
+                          "    зуб даю б1 тіпа крупняк\nпорішали").statements[0]
+        self.assertIsInstance(structure, StructureNode)
+        self.assertEqual([(f.name, f.mutable, f.index) for f in structure.fields],
+                         [("а1", True, 0), ("б1", False, 1)])
+        self.assertEqual([m.name for m in structure.methods], ["ф"])
+
+    def test_chain_nests_left_to_right(self):
+        value = parse("базарь к.центр.ф(1).х").statements[0].value
+        self.assertIsInstance(value, FieldAccessNode)
+        self.assertEqual(value.field, "х")
+        call = value.object
+        self.assertIsInstance(call, MemberCallNode)
+        self.assertEqual((call.method, len(call.arguments)), ("ф", 1))
+        self.assertEqual(call.object.field, "центр")
+        self.assertEqual(call.object.object.name, "к")
+
+    def test_calls_as_arguments_and_statements(self):
+        statement = parse("ф(г(1), ану кажи, склепай Т(2))").statements[0]
+        self.assertIsInstance(statement, CallStatementNode)
+        call = statement.call
+        self.assertIsInstance(call, CallNode)
+        self.assertEqual([type(a) for a in call.arguments], [CallNode, ReadNode, NewObjectNode])
+
+    def test_field_assignment_and_plain_assignment(self):
+        program = parse("перевзувся к.центр.х тепер 1\nперевзувся х тепер 2")
+        field, plain = program.statements
+        self.assertIsInstance(field, FieldAssignmentNode)
+        self.assertEqual((field.target.field, field.target.object.field), ("х", "центр"))
+        self.assertIsInstance(plain, AssignmentNode)
+
+    def test_print_string(self):
+        value = parse('базарь "так"').statements[0].value
+        self.assertEqual((type(value), value.value), (StringNode, "так"))
+
+    def test_stage_two_syntax_errors(self):
+        cases = (
+            ("п.х", 1, 1),                                   # a chain without a call
+            ("перевзувся п.х() тепер 1", 1, 27),              # assignment to a call: at "("
+            ("маю дєло ф() дрібняк\n    тримай 1\nпорішали", 1, 22),
+            ("такі діла Т\n    зуб даю х тіпа дрібняк це 1\nпорішали", 2, 46),
+            ("базарь ф(1,)", 1, 19),
+            ("якшо реально реально\n    маю дєло ф() на виході дрібняк\n"
+             "        тримай 1\n    порішали\nотакої", 2, 5),
+        )
+        for source, line, column in cases:
+            with self.subTest(source=source):
+                with self.assertRaises(CompilationError) as context:
+                    parse(source)
+                self.assertEqual((context.exception.line, context.exception.column), (line, column))
 
 
 if __name__ == "__main__":

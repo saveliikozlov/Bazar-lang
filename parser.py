@@ -9,12 +9,14 @@ the final byte.
 """
 
 from ast_nodes import (
-    AssignmentNode, BinaryNode, BlockNode, BooleanNode, ConstantDeclarationNode, DeclarationNode,
-    ExitNode, IdentifierNode, IfNode, IntegerNode, PrintNode, ProgramNode,
+    AssignmentNode, BinaryNode, BlockNode, BooleanNode, CallNode, CallStatementNode,
+    ConstantDeclarationNode, DeclarationNode, ExitNode, FieldAccessNode, FieldAssignmentNode,
+    FieldNode, FunctionNode, IdentifierNode, IfNode, IntegerNode, MemberCallNode, NewObjectNode,
+    ParameterNode, PrintNode, ProgramNode, ReadNode, ReturnNode, StringNode, StructureNode,
     UnaryNode,
 )
-from lexer import (EOF, I64_MIN_MAGNITUDE, IDENT, INTEGER, KEYWORD, KEYWORDS, LPAREN, NEWLINE,
-                   RPAREN, lex)
+from lexer import (COMMA, DOT, EOF, I64_MIN_MAGNITUDE, IDENT, INTEGER, KEYWORD, KEYWORDS, LPAREN,
+                   NEWLINE, RPAREN, STRING, lex)
 
 TYPE_NAMES = {"дрібняк": "i32", "крупняк": "i64", "базар": "bool"}
 
@@ -49,6 +51,8 @@ def describe(token):
         return f"ім'я «{token.text}»"
     if token.kind == INTEGER:
         return f"число {token.text}"
+    if token.kind == STRING:
+        return "рядок у лапках"
     return f"«{token.text}»"
 
 
@@ -135,9 +139,14 @@ class Parser:
         return ProgramNode(first.line, first.column, statements)
 
     def parse_top_statement(self):
-        # top_statement = constant_declaration | statement
+        # top_statement = constant_declaration | function_declaration
+        #               | structure_declaration | statement
         if self.at_keyword("желєзобетонно"):
             return self.parse_constant_declaration()
+        if self.at_keyword("маю"):
+            return self.parse_function_declaration()
+        if self.at_keyword("такі"):
+            return self.parse_structure_declaration()
         return self.parse_statement()
 
     def parse_statement(self):
@@ -146,6 +155,11 @@ class Parser:
             if token.text == "желєзобетонно":
                 raise self.error("Константа «желєзобетонно» оголошується тільки на верхньому рівні "
                                  "програми, а не всередині «якшо реально».")
+            if token.text == "маю":
+                raise self.error("Функцію «маю дєло» оголошують тільки на верхньому рівні програми "
+                                 "або в «такі діла», а не всередині іншого тіла.")
+            if token.text == "такі":
+                raise self.error("Структуру «такі діла» оголошують тільки на верхньому рівні програми.")
             if token.text == "зуб":
                 return self.parse_immutable_declaration()
             if token.text == "мутна":
@@ -156,6 +170,8 @@ class Parser:
                 return self.parse_print_statement()
             if token.text == "всьо":
                 return self.parse_exit_statement()
+            if token.text == "тримай":
+                return self.parse_return_statement()
             if token.text == "якшо":
                 return self.parse_if_statement()
             if token.text == "а":
@@ -165,6 +181,10 @@ class Parser:
                                  "всередині «якшо реально».")
             if token.text == "отакої":
                 raise self.error("«Отакої» без «якшо реально»? Закривати нічого: спочатку відкрий базар.")
+            if token.text == "порішали":
+                raise self.error("«Порішали» без «маю дєло» чи «такі діла»? Закривати нічого.")
+        if token.kind == IDENT and self.tokens[self.index + 1].kind in (LPAREN, DOT):
+            return self.parse_call_statement()
         raise self.unexpected("інструкцію: оголошення, «перевзувся», «якшо реально», "
                               "«базарь» або «всьо розходимось»")
 
@@ -201,21 +221,48 @@ class Parser:
         return name, declared_type, self.parse_expression()
 
     def parse_type(self):
-        # type = "дрібняк" | "крупняк" | "базар"
+        # type = "дрібняк" | "крупняк" | "базар" | IDENT
+        if self.at(IDENT):
+            return self.eat().text          # a structure name, checked by the semantic pass
         if not self.at_keyword(*TYPE_NAMES):
-            raise self.error(f"Який тип, шеф? Чекаю «дрібняк», «крупняк» або «базар», а тут {describe(self.peek())}.")
+            raise self.error(f"Який тип, шеф? Чекаю «дрібняк», «крупняк», «базар» або назву структури, "
+                             f"а тут {describe(self.peek())}.")
         return TYPE_NAMES[self.eat().text]
 
     def parse_assignment(self):
-        # "перевзувся", IDENT, "тепер", expression
+        # "перевзувся", place, "тепер", expression
         first = self.eat()
-        name = self.expect_name("«перевзувся»")
+        name, target = self.parse_place()
         self.expect_keyword("тепер", f"Де «тепер»? Після «{name.text}» чекаю «тепер» і нове значення, а тут {{found}}.")
-        return AssignmentNode(first.line, first.column, name.text, self.parse_expression())
+        value = self.parse_expression()
+        if target is None:
+            return AssignmentNode(first.line, first.column, name.text, value)
+        return FieldAssignmentNode(first.line, first.column, target, value)
+
+    def parse_place(self):
+        """place = IDENT, { ".", IDENT }
+
+        Returns the last name token and a FieldAccessNode chain, or None
+        for a plain variable."""
+        name = self.expect_name("«перевзувся»")
+        target = None
+        while self.at(DOT):
+            self.eat()
+            if target is None:
+                target = IdentifierNode(name.line, name.column, name.text)
+            name = self.expect_field_name()
+            target = FieldAccessNode(name.line, name.column, target, name.text)
+        if self.at(LPAREN):
+            raise self.error("У виклик не присвоюють: після «перевзувся» пиши змінну або поле, "
+                             "наприклад «п.х», без дужок.")
+        return name, target
 
     def parse_print_statement(self):
-        # "базарь", expression
+        # "базарь", ( STRING | expression )
         first = self.eat()
+        if self.at(STRING):
+            token = self.eat()
+            return PrintNode(first.line, first.column, StringNode(token.line, token.column, token.text))
         return PrintNode(first.line, first.column, self.parse_expression())
 
     def parse_exit_statement(self):
@@ -223,6 +270,22 @@ class Parser:
         first = self.eat()
         self.expect_keyword("розходимось", "«Всьо» — і шо? Після нього чекаю «розходимось», а тут {found}.")
         return ExitNode(first.line, first.column, self.parse_expression())
+
+    def parse_return_statement(self):
+        # "тримай", expression
+        first = self.eat()
+        if self.at(NEWLINE) or self.at(EOF):
+            raise self.error("«Тримай» — а шо тримати? Після нього чекаю значення.")
+        return ReturnNode(first.line, first.column, self.parse_expression())
+
+    def parse_call_statement(self):
+        # IDENT, { [ arguments ], ".", IDENT }, arguments
+        first = self.peek()
+        call = self.parse_chain()
+        if not isinstance(call, (CallNode, MemberCallNode)):
+            raise self.error("Саме ім'я чи поле — це не інструкція. Окремим рядком можна "
+                             "тільки виклик, наприклад «п.посунь(1)».", first)
+        return CallStatementNode(first.line, first.column, call)
 
     def parse_if_statement(self):
         # "якшо", "реально", expression, NEWLINE, block,
@@ -253,7 +316,7 @@ class Parser:
         # block = { NEWLINE }, statement, NEWLINE, { NEWLINE | ( statement, NEWLINE ) }
         while self.at(NEWLINE):
             self.eat()
-        if self.at_keyword("а", "отакої") or self.at(EOF):
+        if self.at_keyword("а", "отакої", "порішали") or self.at(EOF):
             kind = "«якшо реально»" if branch == "if" else "«а нє»"
             raise self.error(f"Блок {kind} пустий. Хотів шось зробить чи просто зайшов?")
         first = self.peek()
@@ -261,7 +324,7 @@ class Parser:
         while True:
             if self.at(NEWLINE):
                 self.eat()
-            elif self.at_keyword("а", "отакої") or self.at(EOF):
+            elif self.at_keyword("а", "отакої", "порішали") or self.at(EOF):
                 break
             else:
                 statements.append(self.parse_block_statement(opener))
@@ -280,6 +343,136 @@ class Parser:
             raise self.unclosed_if(opener)
         self.expect(NEWLINE, "Після інструкції чекаю кінець рядка, а тут {found}. Одна інструкція — один рядок.")
         return statement
+
+    # ------------------------------------------- functions and structures
+
+    def parse_function_declaration(self):
+        # "маю", "дєло", IDENT, "(", [ parameter, { ",", parameter } ], ")",
+        # "на", "виході", type, NEWLINE, block, "порішали"
+        first = self.eat()
+        self.expect_keyword("дєло", "«Маю» — а шо маєш? Після «маю» чекаю «дєло», а тут {found}.")
+        name = self.expect_declared_name("функції", "«маю дєло»")
+        opener = self.expect(LPAREN, f"Після «{name.text}» чекаю «(» зі списком параметрів, "
+                                     f"навіть порожнім «()», а тут {{found}}.")
+        parameters = []
+        if not self.at(RPAREN):
+            parameters.append(self.parse_parameter())
+            while self.at(COMMA):
+                self.eat()
+                parameters.append(self.parse_parameter())
+        self.expect(RPAREN, f"Список параметрів з рядка {opener.line}:{opener.column} не закрито: "
+                            f"чекаю «,» або «)», а тут {{found}}.")
+        self.expect_keyword("на", "Шо на виході? Після «)» чекаю «на виході» і тип результату, а тут {found}.")
+        self.expect_keyword("виході", "Після «на» чекаю «виході» і тип результату, а тут {found}.")
+        result_type = self.parse_type()
+        self.expect(NEWLINE, "Заголовок «маю дєло» скінчився, а далі {found}? Тіло пиши з нового рядка.")
+        self.enter(first)
+        body = self.parse_body(first, "функції «" + name.text + "»")
+        self.leave()
+        self.eat()                           # порішали
+        return FunctionNode(first.line, first.column, name.text, parameters, result_type, body)
+
+    def parse_parameter(self):
+        # parameter = IDENT, "тіпа", type
+        name = self.expect_declared_name("параметра", "«(» або «,»")
+        self.expect_keyword("тіпа", f"Де «тіпа», шеф? Після параметра «{name.text}» треба вказати тип, "
+                                    f"а тут {{found}}.")
+        return ParameterNode(name.line, name.column, name.text, self.parse_type())
+
+    def parse_body(self, opener, what):
+        """A function body: a block closed by порішали, which is left unconsumed."""
+        while self.at(NEWLINE):
+            self.eat()
+        if self.at_keyword("порішали") or self.at(EOF):
+            if self.at(EOF):
+                raise self.unclosed_body(opener)
+            raise self.error(f"Тіло {what} пусте. Хоч «тримай» напиши.")
+        first = self.peek()
+        statements = [self.parse_body_statement(opener)]
+        while not self.at_keyword("порішали"):
+            if self.at(EOF):
+                raise self.unclosed_body(opener)
+            if self.at(NEWLINE):
+                self.eat()
+            else:
+                statements.append(self.parse_body_statement(opener))
+        return BlockNode(first.line, first.column, statements)
+
+    def parse_body_statement(self, opener):
+        if self.at_keyword("а", "отакої"):
+            self.parse_statement()           # raises the matching diagnostic
+        statement = self.parse_statement()
+        if self.at(EOF):
+            raise self.unclosed_body(opener)
+        self.expect(NEWLINE, "Після інструкції чекаю кінець рядка, а тут {found}. Одна інструкція — один рядок.")
+        return statement
+
+    def unclosed_body(self, opener):
+        phrase = "маю дєло" if opener.text == "маю" else "такі діла"
+        return self.error(f"Де «порішали»? «{phrase}» з рядка {opener.line}:{opener.column} "
+                          f"не закрито, а файл уже скінчився.")
+
+    def parse_structure_declaration(self):
+        # "такі", "діла", IDENT, NEWLINE, { NEWLINE }, member, NEWLINE,
+        # { NEWLINE | ( member, NEWLINE ) }, "порішали"
+        first = self.eat()
+        self.expect_keyword("діла", "«Такі» — а далі? Після «такі» чекаю «діла», а тут {found}.")
+        name = self.expect_declared_name("структури", "«такі діла»")
+        self.expect(NEWLINE, f"Після «такі діла {name.text}» чекаю кінець рядка, а тут {{found}}. "
+                             f"Поля пиши з нового рядка.")
+        fields, methods = [], []
+        while True:
+            if self.at(NEWLINE):
+                self.eat()
+            elif self.at(EOF):
+                raise self.unclosed_body(first)
+            elif self.at_keyword("порішали"):
+                break
+            else:
+                self.parse_member(fields, methods)
+                if self.at(EOF):
+                    raise self.unclosed_body(first)
+                self.expect(NEWLINE, "Після поля чи функції чекаю кінець рядка, а тут {found}.")
+        if not fields and not methods:
+            raise self.error(f"Структура «{name.text}» пуста. Дай їй хоч одне поле чи функцію.")
+        self.eat()                           # порішали
+        return StructureNode(first.line, first.column, name.text, fields, methods)
+
+    def parse_member(self, fields, methods):
+        # member = field_declaration | function_declaration
+        if self.at_keyword("маю"):
+            methods.append(self.parse_function_declaration())
+        elif self.at_keyword("зуб", "мутна"):
+            fields.append(self.parse_field_declaration(len(fields)))
+        else:
+            raise self.unexpected("поле («зуб даю» чи «мутна тєма»), функцію «маю дєло» або «порішали»")
+
+    def parse_field_declaration(self, index):
+        # ( "зуб", "даю" | "мутна", "тєма" ), IDENT, "тіпа", type
+        first = self.eat()
+        mutable = first.text == "мутна"
+        if mutable:
+            self.expect_keyword("тєма", "Де «тєма»? «Мутна» сама не ходить, після неї треба «тєма», а тут {found}.")
+        else:
+            self.expect_keyword("даю", "Де «даю», шеф? Після «зуб» треба «даю», а тут {found}.")
+        name = self.expect_declared_name("поля", "«зуб даю» чи «мутна тєма»")
+        self.expect_keyword("тіпа", f"Де «тіпа», шеф? Після поля «{name.text}» треба вказати тип, а тут {{found}}.")
+        declared_type = self.parse_type()
+        if self.at_keyword("це"):
+            raise self.error("Полю значення тут не дають: його задає «склепай» при створенні об'єкта.")
+        return FieldNode(first.line, first.column, name.text, declared_type, mutable, index)
+
+    def expect_declared_name(self, what, phrase):
+        token = self.peek()
+        if token.kind == KEYWORD:
+            raise self.error(f"«{token.text}» — зарезервоване слово, назвою {what} воно не стане.")
+        return self.expect(IDENT, f"Де назва {what}? Після {phrase} чекаю ім'я, а тут {{found}}.")
+
+    def expect_field_name(self):
+        token = self.peek()
+        if token.kind == KEYWORD:
+            raise self.error(f"«{token.text}» — зарезервоване слово, полем воно не стане.")
+        return self.expect(IDENT, "Після «.» чекаю назву поля чи функції, а тут {found}.")
 
     # ---------------------------------------------------------- expressions
 
@@ -391,16 +584,25 @@ class Parser:
         return node
 
     def parse_primary(self):
-        # INTEGER | boolean_literal | IDENT | "(", expression, ")"
+        # INTEGER | boolean_literal | read_expression | object_creation
+        # | chain | "(", expression, ")"
         token = self.peek()
         if token.kind == INTEGER:
             self.eat()
+            if self.at(DOT):
+                raise self.error("Дробових чисел у Базарі нема: тільки цілі, без «.».")
             return IntegerNode(token.line, token.column, token.text.lstrip("0") or "0")
         if token.kind == IDENT:
-            self.eat()
-            return IdentifierNode(token.line, token.column, token.text)
+            return self.parse_chain()
         if self.at_keyword("реально", "гон"):
             return self.parse_boolean_literal()
+        if self.at_keyword("ану"):
+            return self.parse_read_expression()
+        if self.at_keyword("склепай"):
+            return self.parse_object_creation()
+        if token.kind == STRING:
+            raise self.error("Рядок у лапках можна тільки базарити: «базарь \"...\"». "
+                             "У виразах рядків нема.")
         if token.kind == LPAREN:
             self.eat()
             self.enter(token)
@@ -411,6 +613,52 @@ class Parser:
         if token.kind == KEYWORD and token.text == "нє":
             raise self.error("«Нє» саме по собі — не заперечення: логічного НЕ в мові нема.")
         raise self.error(f"Де значення? Тут має бути число, «реально», «гон», ім'я або «(», а не {describe(token)}.")
+
+    def parse_read_expression(self):
+        # "ану", "кажи"
+        first = self.eat()
+        self.expect_keyword("кажи", "«Ану» — і шо? Після «ану» чекаю «кажи», а тут {found}.")
+        return ReadNode(first.line, first.column)
+
+    def parse_object_creation(self):
+        # "склепай", IDENT, arguments
+        first = self.eat()
+        name = self.expect_declared_name("структури", "«склепай»")
+        if not self.at(LPAREN):
+            raise self.error(f"Після «склепай {name.text}» чекаю «(» зі значеннями полів, а тут "
+                             f"{describe(self.peek())}.")
+        return NewObjectNode(first.line, first.column, name.text, self.parse_arguments())
+
+    def parse_chain(self):
+        # IDENT, [ arguments ], { ".", IDENT, [ arguments ] }
+        name = self.eat()
+        if self.at(LPAREN):
+            node = CallNode(name.line, name.column, name.text, self.parse_arguments())
+        else:
+            node = IdentifierNode(name.line, name.column, name.text)
+        while self.at(DOT):
+            self.eat()
+            member = self.expect_field_name()
+            if self.at(LPAREN):
+                node = MemberCallNode(member.line, member.column, node, member.text, self.parse_arguments())
+            else:
+                node = FieldAccessNode(member.line, member.column, node, member.text)
+        return node
+
+    def parse_arguments(self):
+        # "(", [ expression, { ",", expression } ], ")"
+        opener = self.eat()
+        self.enter(opener)
+        arguments = []
+        if not self.at(RPAREN):
+            arguments.append(self.parse_expression())
+            while self.at(COMMA):
+                self.eat()
+                arguments.append(self.parse_expression())
+        self.expect(RPAREN, f"Дужку з рядка {opener.line}:{opener.column} не закрито: "
+                            f"чекаю «,» або «)», а тут {{found}}.")
+        self.leave()
+        return arguments
 
     def parse_boolean_literal(self):
         # "реально" | "гон"

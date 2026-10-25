@@ -11,6 +11,10 @@ Scalar fields have a fixed order. Children appear under initializer, value,
 condition, then_body, else_body, left, right, and operand labels. A missing
 else branch prints as else_body: None. Program and block statements appear
 in source order directly beneath their parent.
+
+Stage 2 adds list labels (parameters, fields, methods, arguments): each
+item is printed one level below the label, and an empty list prints as
+label: []. Types print as i32, i64, bool, or the structure name.
 """
 
 from __future__ import annotations
@@ -62,6 +66,13 @@ class ASTNode:
                 if node is None:
                     yield f"{INDENT * depth}{label}: None"
                     continue
+                if isinstance(node, list):
+                    if not node:
+                        yield f"{INDENT * depth}{label}: []"
+                        continue
+                    yield f"{INDENT * depth}{label}:"
+                    stack.extend((depth + 1, None, item) for item in reversed(node))
+                    continue
                 yield f"{INDENT * depth}{label}:"
                 depth += 1
             yield INDENT * depth + node.header()
@@ -74,6 +85,11 @@ class ASTNode:
 
 def _flag(value):
     return "true" if value else "false"
+
+
+def _quote(text):
+    """Show a string literal value with its escapes, as it is written in source."""
+    return '"' + text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'
 
 
 # ------------------------------------------------------------- program
@@ -140,7 +156,7 @@ class ConstantDeclarationNode(StmtNode):
 
 @dataclass
 class AssignmentNode(StmtNode):
-    """Assignment syntax: перевзувся NAME тепер EXPR."""
+    """Assignment to a variable: перевзувся NAME тепер EXPR."""
     name: str
     value: ExprNode
 
@@ -149,6 +165,19 @@ class AssignmentNode(StmtNode):
 
     def labelled_children(self):
         return (("value", self.value),)
+
+
+@dataclass
+class FieldAssignmentNode(StmtNode):
+    """Assignment to a field: перевзувся NAME.FIELD{.FIELD} тепер EXPR.
+
+    The target is a FieldAccessNode chain whose innermost object is an
+    IdentifierNode; it never contains a call."""
+    target: ExprNode
+    value: ExprNode
+
+    def labelled_children(self):
+        return (("target", self.target), ("value", self.value))
 
 
 @dataclass
@@ -179,6 +208,85 @@ class ExitNode(StmtNode):
 
     def labelled_children(self):
         return (("value", self.value),)
+
+
+@dataclass
+class ReturnNode(StmtNode):
+    """Return syntax: тримай EXPR (inside a function body)."""
+    value: ExprNode
+
+    def labelled_children(self):
+        return (("value", self.value),)
+
+
+@dataclass
+class CallStatementNode(StmtNode):
+    """A call on its own line; call is a CallNode or a MemberCallNode."""
+    call: ExprNode
+
+    def attributes(self):
+        return (("member_call", _flag(isinstance(self.call, MemberCallNode))),)
+
+    def labelled_children(self):
+        return (("call", self.call),)
+
+
+# ------------------------------------------------- functions and structures
+
+@dataclass
+class ParameterNode(ASTNode):
+    """One parameter: NAME тіпа TYPE."""
+    name: str
+    declared_type: str
+
+    def attributes(self):
+        return (("name", self.name), ("type", self.declared_type))
+
+
+@dataclass
+class FunctionNode(StmtNode):
+    """маю дєло NAME(PARAMETERS) на виході TYPE ... порішали.
+
+    At the top level it is a function; inside такі діла, a member function."""
+    name: str
+    parameters: list[ParameterNode]
+    result_type: str
+    body: BlockNode
+
+    def attributes(self):
+        return (("name", self.name), ("result", self.result_type))
+
+    def labelled_children(self):
+        return (("parameters", self.parameters), ("body", self.body))
+
+
+@dataclass
+class FieldNode(ASTNode):
+    """A field: зуб даю NAME тіпа TYPE (constant) or мутна тєма ... (mutable).
+
+    index is the position among the structure's fields, counting from 0."""
+    name: str
+    declared_type: str
+    mutable: bool
+    index: int
+
+    def attributes(self):
+        return (("name", self.name), ("type", self.declared_type),
+                ("mutable", _flag(self.mutable)), ("index", self.index))
+
+
+@dataclass
+class StructureNode(StmtNode):
+    """такі діла NAME ... порішали: fields and member functions in source order each."""
+    name: str
+    fields: list[FieldNode]
+    methods: list[FunctionNode]
+
+    def attributes(self):
+        return (("name", self.name),)
+
+    def labelled_children(self):
+        return (("fields", self.fields), ("methods", self.methods))
 
 
 # ---------------------------------------------------------- expressions
@@ -212,6 +320,73 @@ class IdentifierNode(ExprNode):
 
     def attributes(self):
         return (("name", self.name),)
+
+
+@dataclass
+class StringNode(ExprNode):
+    """String literal; value has its escapes already resolved. Only базарь takes it."""
+    value: str
+
+    def attributes(self):
+        return (("value", _quote(self.value)),)
+
+
+@dataclass
+class ReadNode(ExprNode):
+    """ану кажи: reads one integer from standard input."""
+
+
+@dataclass
+class CallNode(ExprNode):
+    """Call of a function by name: NAME(ARGUMENTS)."""
+    name: str
+    arguments: list[ExprNode]
+
+    def attributes(self):
+        return (("name", self.name),)
+
+    def labelled_children(self):
+        return (("arguments", self.arguments),)
+
+
+@dataclass
+class FieldAccessNode(ExprNode):
+    """OBJECT.FIELD; positioned at the field name."""
+    object: ExprNode
+    field: str
+
+    def attributes(self):
+        return (("field", self.field),)
+
+    def labelled_children(self):
+        return (("object", self.object),)
+
+
+@dataclass
+class MemberCallNode(ExprNode):
+    """OBJECT.METHOD(ARGUMENTS); positioned at the method name."""
+    object: ExprNode
+    method: str
+    arguments: list[ExprNode]
+
+    def attributes(self):
+        return (("method", self.method),)
+
+    def labelled_children(self):
+        return (("object", self.object), ("arguments", self.arguments))
+
+
+@dataclass
+class NewObjectNode(ExprNode):
+    """склепай STRUCTURE(ARGUMENTS): one argument per field, in field order."""
+    structure: str
+    arguments: list[ExprNode]
+
+    def attributes(self):
+        return (("structure", self.structure),)
+
+    def labelled_children(self):
+        return (("arguments", self.arguments),)
 
 
 @dataclass

@@ -1,0 +1,24 @@
+ProgramNode line=1 column=1
+  FunctionNode line=1 column=1 name=покажи result=bool
+    parameters:
+      ParameterNode line=1 column=30 name=х type=i32
+    body:
+      BlockNode line=2 column=5
+        PrintNode line=2 column=5
+          value:
+            IdentifierNode line=2 column=18 name=х
+        ReturnNode line=3 column=5
+          value:
+            BooleanNode line=3 column=18 value=true
+  DeclarationNode line=5 column=1 name=а1 type=i32 mutable=false
+    initializer:
+      ReadNode line=5 column=48
+  CallStatementNode line=6 column=1 member_call=false
+    call:
+      CallNode line=6 column=1 name=покажи
+        arguments:
+          BinaryNode line=6 column=18 operator=add
+            left:
+              IdentifierNode line=6 column=14 name=а1
+            right:
+              ReadNode line=6 column=27

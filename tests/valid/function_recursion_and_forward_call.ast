@@ -1,0 +1,49 @@
+ProgramNode line=2 column=1
+  FunctionNode line=2 column=1 name=факт result=i64
+    parameters:
+      ParameterNode line=2 column=26 name=н type=i64
+    body:
+      BlockNode line=3 column=5
+        IfNode line=3 column=5
+          condition:
+            BinaryNode line=3 column=32 operator=lt
+              left:
+                IdentifierNode line=3 column=29 name=н
+              right:
+                IntegerNode line=3 column=43 value=2
+          then_body:
+            BlockNode line=4 column=9
+              ReturnNode line=4 column=9
+                value:
+                  IntegerNode line=4 column=22 value=1
+          else_body: None
+        ReturnNode line=6 column=5
+          value:
+            BinaryNode line=6 column=52 operator=add
+              left:
+                BinaryNode line=6 column=21 operator=mul
+                  left:
+                    IdentifierNode line=6 column=18 name=н
+                  right:
+                    CallNode line=6 column=26 name=факт
+                      arguments:
+                        BinaryNode line=6 column=38 operator=sub
+                          left:
+                            IdentifierNode line=6 column=35 name=н
+                          right:
+                            IntegerNode line=6 column=49 value=1
+              right:
+                CallNode line=6 column=61 name=нуль
+                  arguments: []
+  FunctionNode line=8 column=1 name=нуль result=i64
+    parameters: []
+    body:
+      BlockNode line=9 column=5
+        ReturnNode line=9 column=5
+          value:
+            IntegerNode line=9 column=18 value=0
+  PrintNode line=11 column=1
+    value:
+      CallNode line=11 column=14 name=факт
+        arguments:
+          IntegerNode line=11 column=23 value=5

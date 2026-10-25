@@ -3,8 +3,9 @@
 Two machines cooperate in one byte-by-byte pass:
 * the UTF-8 machine validates all bytes, including comments, and assembles
   Unicode scalar values from multibyte sequences;
-* the token machine (START, WORD, APOSTROPHE, INTEGER, COMMENT, CR) receives each scalar
-  and its first-byte offset, then emits tokens.
+* the token machine (START, WORD, APOSTROPHE, INTEGER, STRING, ESCAPE,
+  COMMENT, CR) receives each scalar and its first-byte offset, then emits
+  tokens.
 
 No regular expressions, str.split(), or lexer generators are used. Words
 are read completely before keyword lookup, so keywords never match prefixes.
@@ -24,8 +25,11 @@ import sys
 KEYWORD = "keyword"
 IDENT = "ident"
 INTEGER = "integer"
+STRING = "string"
 LPAREN = "lparen"
 RPAREN = "rparen"
+COMMA = "comma"
+DOT = "dot"
 NEWLINE = "newline"
 EOF = "eof"
 
@@ -37,6 +41,8 @@ KEYWORDS = frozenset((
     "якшо", "реально", "а", "нє", "отакої",
     "гон", "або", "і", "ше", "рівно", "не", "більше", "менше",
     "плюс", "мінус", "на", "ділити",
+    "маю", "дєло", "виході", "тримай", "порішали",
+    "такі", "діла", "склепай", "ану", "кажи",
 ))
 # Overflow check, first layer: no integer type is wider than крупняк (i64).
 # The largest literal is the magnitude of i64's minimum, 2**63, which is only
@@ -61,14 +67,17 @@ NEWLINE_TEXT = "\n"
 
 TAB, LF, CR, SPACE = 0x09, 0x0A, 0x0D, 0x20
 COLON, LEFT_PAREN, RIGHT_PAREN, UNDERSCORE = 0x3A, 0x28, 0x29, 0x5F
+COMMA_CHAR, DOT_CHAR, QUOTE, BACKSLASH = 0x2C, 0x2E, 0x22, 0x5C
+# The character after a backslash inside a string literal, and what it means.
+ESCAPES = {0x6E: "\n", QUOTE: '"', BACKSLASH: "\\"}
 BYTE_ORDER_MARK = 0xFEFF
 # Ukrainian apostrophe inside a name: ASCII ' and U+02BC modifier letter apostrophe.
 APOSTROPHES = frozenset((0x27, 0x02BC))
 APOSTROPHE_MESSAGE = "Апостроф ставлять тільки між літерами, як у «з'їзд»."
 
 # Token state machine states.
-START, WORD, APOSTROPHE, NUMBER, COMMENT, AFTER_CR = (
-    "START", "WORD", "APOSTROPHE", "INTEGER", "COMMENT", "CR")
+START, WORD, APOSTROPHE, NUMBER, STRING_BODY, ESCAPE, COMMENT, AFTER_CR = (
+    "START", "WORD", "APOSTROPHE", "INTEGER", "STRING", "ESCAPE", "COMMENT", "CR")
 
 
 @dataclass(frozen=True)
@@ -129,6 +138,8 @@ class Lexer:
         self.token_column = 1
         self.after_letter = False    # WORD: was the previous scalar a letter?
         self.apostrophe_offset = 0
+        self.string_chars = []       # STRING: decoded characters so far
+        self.escape_offset = 0
 
     # -------------------------------------------------- UTF-8 state machine
 
@@ -226,6 +237,16 @@ class Lexer:
                 if cp == RIGHT_PAREN:
                     self.tokens.append(Token(RPAREN, ")", self.line, column))
                     return
+                if cp == COMMA_CHAR:
+                    self.tokens.append(Token(COMMA, ",", self.line, column))
+                    return
+                if cp == DOT_CHAR:
+                    self.tokens.append(Token(DOT, ".", self.line, column))
+                    return
+                if cp == QUOTE:
+                    self.begin(STRING_BODY, offset)
+                    self.string_chars = []
+                    return
                 if cp in APOSTROPHES:
                     raise self.error_at(offset, APOSTROPHE_MESSAGE)
                 if cp == BYTE_ORDER_MARK and offset == 0:
@@ -274,6 +295,29 @@ class Lexer:
                                    f"(межа «крупняк»), більше ніде не влізе.")
                 self.emit(INTEGER, digits)
                 continue
+
+            if state == STRING_BODY:
+                if cp is None or cp == LF or cp == CR:
+                    raise LexError(self.token_line, self.token_column,
+                                   "Рядок не закритий: лапку відкрив, а закриваючої «\"» до кінця рядка нема.")
+                if cp == QUOTE:
+                    # The token text is the decoded value, escapes resolved.
+                    self.emit(STRING, "".join(self.string_chars))
+                    return
+                if cp == BACKSLASH:
+                    self.state = ESCAPE
+                    self.escape_offset = offset
+                    return
+                self.string_chars.append(chr(cp))
+                return
+
+            if state == ESCAPE:
+                if cp is not None and cp in ESCAPES:
+                    self.string_chars.append(ESCAPES[cp])
+                    self.state = STRING_BODY
+                    return
+                raise self.error_at(self.escape_offset,
+                                    "Шо за «\\» такий? У рядку можна тільки «\\n», «\\\"» або «\\\\».")
 
             if state == COMMENT:
                 if cp is None or cp == LF or cp == CR:

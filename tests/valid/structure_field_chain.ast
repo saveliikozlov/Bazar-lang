@@ -1,0 +1,46 @@
+ProgramNode line=2 column=1
+  StructureNode line=2 column=1 name=Точка
+    fields:
+      FieldNode line=3 column=5 name=х type=i32 mutable=true index=0
+      FieldNode line=4 column=5 name=у type=i32 mutable=true index=1
+    methods: []
+  StructureNode line=6 column=1 name=Коло
+    fields:
+      FieldNode line=7 column=5 name=центр type=Точка mutable=true index=0
+      FieldNode line=8 column=5 name=радіус type=i32 mutable=false index=1
+    methods: []
+  DeclarationNode line=10 column=1 name=к type=Коло mutable=true
+    initializer:
+      NewObjectNode line=10 column=47 structure=Коло
+        arguments:
+          NewObjectNode line=10 column=71 structure=Точка
+            arguments:
+              IntegerNode line=10 column=97 value=1
+              IntegerNode line=10 column=100 value=2
+          IntegerNode line=10 column=104 value=5
+  FieldAssignmentNode line=11 column=1
+    target:
+      FieldAccessNode line=11 column=36 field=х
+        object:
+          FieldAccessNode line=11 column=25 field=центр
+            object:
+              IdentifierNode line=11 column=22 name=к
+    value:
+      BinaryNode line=11 column=71 operator=add
+        left:
+          FieldAccessNode line=11 column=68 field=у
+            object:
+              FieldAccessNode line=11 column=55 field=центр
+                object:
+                  IdentifierNode line=11 column=50 name=к
+        right:
+          FieldAccessNode line=11 column=83 field=радіус
+            object:
+              IdentifierNode line=11 column=80 name=к
+  PrintNode line=12 column=1
+    value:
+      FieldAccessNode line=12 column=28 field=х
+        object:
+          FieldAccessNode line=12 column=17 field=центр
+            object:
+              IdentifierNode line=12 column=14 name=к
