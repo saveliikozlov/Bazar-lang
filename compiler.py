@@ -58,12 +58,23 @@ def compile_file(source_path, output_path):
         return 2
     try:
         tree = parse_program(data)
-        analyze(tree)
+        info = analyze(tree)
     except (LexError, CompilationError) as error:
         write_text(sys.stderr, compilation_error_line(error))
         return 1
-    # Code generation is the next step; until then a checked program
-    # produces no output file.
+    # Imported here so that --ast works without llvmlite installed.
+    try:
+        from codegen import generate
+    except ImportError:
+        write_text(sys.stderr, "От фігня, llvmlite-у нема. Запусти через .venv/bin/python або постав "
+                               "його командою «pip install -r requirements.txt», тьфу ти нути.\n")
+        return 2
+    text = generate(tree, info)
+    try:
+        Path(output_path).write_text(text, encoding="utf-8")
+    except OSError as error:
+        write_text(sys.stderr, f"Файл '{output_path}' не записується: {describe_os_error(error)}.\n")
+        return 2
     return 0
 
 
