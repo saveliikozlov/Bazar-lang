@@ -191,9 +191,10 @@ class Parser:
     def parse_constant_declaration(self):
         # "желєзобетонно", IDENT, "тіпа", type, "це", expression
         first = self.eat()
-        name, declared_type, initializer = self.parse_declaration_parts("«желєзобетонно»")
-        return ConstantDeclarationNode(first.line, first.column, name.text,
-                                       declared_type, initializer)
+        name, declared_type, type_at, initializer = self.parse_declaration_parts("«желєзобетонно»")
+        node = ConstantDeclarationNode(first.line, first.column, name.text, declared_type, initializer)
+        node.type_at = type_at
+        return node
 
     def parse_immutable_declaration(self):
         # "зуб", "даю", IDENT, "тіпа", type, "це", expression
@@ -208,20 +209,24 @@ class Parser:
         return self.parse_declaration_rest(first, "«мутна тєма»", mutable=True)
 
     def parse_declaration_rest(self, first, phrase, mutable):
-        name, declared_type, initializer = self.parse_declaration_parts(phrase)
-        return DeclarationNode(first.line, first.column, name.text,
-                               declared_type, mutable, initializer)
+        name, declared_type, type_at, initializer = self.parse_declaration_parts(phrase)
+        node = DeclarationNode(first.line, first.column, name.text, declared_type, mutable, initializer)
+        node.type_at = type_at
+        return node
 
     def parse_declaration_parts(self, phrase):
         """Shared declaration suffix: IDENT, тіпа, type, це, expression."""
         name = self.expect_name(phrase)
         self.expect_keyword("тіпа", f"Де «тіпа», шеф? Після «{name.text}» треба вказати тип, а тут {{found}}.")
+        type_at = self.peek()
         declared_type = self.parse_type()
         self.expect_keyword("це", "Де «це»? Після типу чекаю «це» і початкове значення, а тут {found}.")
-        return name, declared_type, self.parse_expression()
+        return name, declared_type, type_at, self.parse_expression()
 
     def parse_type(self):
         # type = "дрібняк" | "крупняк" | "базар" | IDENT
+        # Callers keep the type token as node.type_at: the semantic pass
+        # reports an unknown structure name at that position.
         if self.at(IDENT):
             return self.eat().text          # a structure name, checked by the semantic pass
         if not self.at_keyword(*TYPE_NAMES):
@@ -364,20 +369,26 @@ class Parser:
                             f"чекаю «,» або «)», а тут {{found}}.")
         self.expect_keyword("на", "Шо на виході? Після «)» чекаю «на виході» і тип результату, а тут {found}.")
         self.expect_keyword("виході", "Після «на» чекаю «виході» і тип результату, а тут {found}.")
+        type_at = self.peek()
         result_type = self.parse_type()
         self.expect(NEWLINE, "Заголовок «маю дєло» скінчився, а далі {found}? Тіло пиши з нового рядка.")
         self.enter(first)
         body = self.parse_body(first, "функції «" + name.text + "»")
         self.leave()
         self.eat()                           # порішали
-        return FunctionNode(first.line, first.column, name.text, parameters, result_type, body)
+        node = FunctionNode(first.line, first.column, name.text, parameters, result_type, body)
+        node.type_at = type_at
+        return node
 
     def parse_parameter(self):
         # parameter = IDENT, "тіпа", type
         name = self.expect_declared_name("параметра", "«(» або «,»")
         self.expect_keyword("тіпа", f"Де «тіпа», шеф? Після параметра «{name.text}» треба вказати тип, "
                                     f"а тут {{found}}.")
-        return ParameterNode(name.line, name.column, name.text, self.parse_type())
+        type_at = self.peek()
+        node = ParameterNode(name.line, name.column, name.text, self.parse_type())
+        node.type_at = type_at
+        return node
 
     def parse_body(self, opener, what):
         """A function body: a block closed by порішали, which is left unconsumed."""
@@ -457,10 +468,13 @@ class Parser:
             self.expect_keyword("даю", "Де «даю», шеф? Після «зуб» треба «даю», а тут {found}.")
         name = self.expect_declared_name("поля", "«зуб даю» чи «мутна тєма»")
         self.expect_keyword("тіпа", f"Де «тіпа», шеф? Після поля «{name.text}» треба вказати тип, а тут {{found}}.")
+        type_at = self.peek()
         declared_type = self.parse_type()
         if self.at_keyword("це"):
             raise self.error("Полю значення тут не дають: його задає «склепай» при створенні об'єкта.")
-        return FieldNode(first.line, first.column, name.text, declared_type, mutable, index)
+        node = FieldNode(first.line, first.column, name.text, declared_type, mutable, index)
+        node.type_at = type_at
+        return node
 
     def expect_declared_name(self, what, phrase):
         token = self.peek()

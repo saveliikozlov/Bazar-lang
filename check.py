@@ -2,9 +2,13 @@
 
     python3 check.py
 
-tests/valid/NAME.bazar: exit 0, exact NAME.ast on stdout, empty stderr.
-tests/invalid/NAME.bazar: exit 1, empty stdout, exact single-line NAME.err on stderr.
-examples/NAME.bazar: exit 0 and empty stderr.
+tests/valid/NAME.bazar: --ast exits 0, exact NAME.ast on stdout, empty stderr.
+    These are front-end fixtures: syntactically valid, and some of the
+    Stage 1 ones deliberately use names that were never declared.
+tests/invalid/NAME.bazar: compiling exits 1, empty stdout, exact single-line
+    NAME.err on stderr, and no output file. Lexical, syntax, and semantic
+    errors all go through the full compiler.
+examples/NAME.bazar: compiling exits 0 with empty stderr.
 
 Expectations are never written or regenerated. CLI invocations run from a
 temporary directory, independently of the current working directory.
@@ -32,6 +36,15 @@ def run_compiler(source, cwd):
                           capture_output=True, cwd=cwd, timeout=60)
 
 
+def run_compile(source, cwd):
+    """Compile source to cwd/out.ll; return the result and whether out.ll exists."""
+    output = Path(cwd) / "out.ll"
+    output.unlink(missing_ok=True)
+    result = subprocess.run([sys.executable, str(COMPILER), str(source), str(output)],
+                            capture_output=True, cwd=cwd, timeout=60)
+    return result, output.exists()
+
+
 def check_valid(source, cwd):
     expected_file = source.with_suffix(".ast")
     if not expected_file.exists():
@@ -52,18 +65,20 @@ def check_invalid(source, cwd):
     if not expected_file.exists():
         return f"нема очікуваного файлу {expected_file.name}"
     expected = expected_file.read_bytes()
-    result = run_compiler(source, cwd)
+    result, wrote_output = run_compile(source, cwd)
     if result.returncode != 1:
         return f"код виходу {result.returncode}, а чекали 1"
     if result.stdout:
         return "stdout не порожній"
+    if wrote_output:
+        return "після помилки лишився вихідний файл"
     if result.stderr != expected:
         return f"чекали {show(expected)!r}, а отримали {show(result.stderr)!r}"
     return None
 
 
 def check_example(source, cwd):
-    result = run_compiler(source, cwd)
+    result, _ = run_compile(source, cwd)
     if result.returncode != 0 or result.stderr:
         return f"код виходу {result.returncode}, stderr: {show(result.stderr)}"
     return None
