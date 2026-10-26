@@ -4,15 +4,15 @@
 // Grammar productions are verbatim grammar.ebnf fragments, verified by tests.
 const { WORD_CHAR } = require('./positions');
 
-const NOT_EXECUTED = "The parser currently checks syntax only: values are not evaluated, and types and mutability are not checked. These are intended semantics.";
+const NOT_EXECUTED = "The compiler's semantic pass checks types, mutability, and the other rules in README «Semantic rules» before it generates LLVM IR; the editor underlines those errors too.";
 
 const P = {
   constant: 'constant_declaration = "желєзобетонно", IDENT, "тіпа", type, "це", expression ;',
   immutable: 'immutable_declaration = "зуб", "даю", IDENT, "тіпа", type, "це", expression ;',
   mutable: 'mutable_declaration = "мутна", "тєма", IDENT, "тіпа", type, "це", expression ;',
-  type: 'type = "дрібняк" | "крупняк" | "базар" ;',
-  assignment: 'assignment = "перевзувся", IDENT, "тепер", expression ;',
-  print: 'print_statement = "базарь", expression ;',
+  type: 'type = "дрібняк" | "крупняк" | "базар" | IDENT ;',
+  assignment: 'assignment = "перевзувся", place, "тепер", expression ;',
+  print: 'print_statement = "базарь", ( STRING | expression ) ;',
   exit: 'exit_statement = "всьо", "розходимось", expression ;',
   if: 'if_statement = "якшо", "реально", expression, NEWLINE, block, [ "а", "нє", NEWLINE, block ], "отакої" ;',
   or: 'or_expression = and_expression, { "або", and_expression } ;',
@@ -24,7 +24,29 @@ const P = {
   unary: 'unary = "мінус", ( unary | I64_MIN_MAGNITUDE ) | primary ;',
   boolean: 'boolean_literal = "реально" | "гон" ;',
   comment: 'comment = "чутки", ":", { comment_char } ;',
+  function: 'function_declaration = "маю", "дєло", IDENT, "(", [ parameter, { ",", parameter } ], ")", "на", "виході", type, NEWLINE, block, "порішали" ;',
+  structure: 'structure_declaration = "такі", "діла", IDENT, NEWLINE, { NEWLINE }, member, NEWLINE, { NEWLINE | ( member, NEWLINE ) }, "порішали" ;',
+  field: 'field_declaration = ( "зуб", "даю" | "мутна", "тєма" ), IDENT, "тіпа", type, [ "це", expression ] ;',
+  return: 'return_statement = "тримай", expression ;',
+  read: 'read_expression = "ану", "кажи" ;',
+  newObject: 'object_creation = "склепай", IDENT, arguments ;',
 };
+
+const FUNCTION_EXAMPLE = [
+  'маю дєло сума(а1 тіпа дрібняк, б1 тіпа дрібняк) на виході дрібняк',
+  '    тримай а1 плюс б1',
+  'порішали',
+  'базарь сума(1, 2)',
+].join('\n');
+
+const STRUCTURE_EXAMPLE = [
+  'такі діла Точка',
+  '    мутна тєма х тіпа дрібняк це 0',
+  '    зуб даю у тіпа дрібняк',
+  'порішали',
+  'мутна тєма п тіпа Точка це склепай Точка(1, 2)',
+  'базарь п',
+].join('\n');
 
 const IF_EXAMPLE = [
   'якшо реально 5 більше 3',
@@ -100,6 +122,37 @@ const PHRASES = [
     productions: [P.multiplicativeOperator],
     syntax: 'EXPR ділити на EXPR',
     example: 'базарь 8 ділити на 2',
+    semantic: true,
+  },
+  {
+    id: 'маю дєло', kind: 'phrase', words: ['маю', 'дєло'],
+    meaning: "Declares a function, literally I have a business. Typed parameters go in parentheses, the result type after `на виході`, and `порішали` closes the body. Inside `такі діла` it declares a member function that sees the fields by name. Equivalent: `fn name(p: T) -> R { … }`.",
+    productions: [P.function],
+    syntax: 'маю дєло NAME(P тіпа TYPE, …) на виході TYPE ⏎ BLOCK порішали',
+    example: FUNCTION_EXAMPLE,
+    semantic: true,
+  },
+  {
+    id: 'на виході', kind: 'phrase', words: ['на', 'виході'],
+    meaning: "Introduces the result type of a function, literally at the output. It follows the closing `)` of the parameter list.",
+    productions: [P.function],
+    syntax: 'маю дєло NAME(…) на виході TYPE',
+    example: FUNCTION_EXAMPLE,
+  },
+  {
+    id: 'такі діла', kind: 'phrase', words: ['такі', 'діла'],
+    meaning: "Declares a structure, literally such are the things. Its body lists fields (`зуб даю` constant, `мутна тєма` mutable, with an optional default after `це`) and member functions, and `порішали` closes it. Equivalent: `struct Name { … }`.",
+    productions: [P.structure, P.field],
+    syntax: 'такі діла NAME ⏎ FIELDS AND MEMBER FUNCTIONS порішали',
+    example: STRUCTURE_EXAMPLE,
+    semantic: true,
+  },
+  {
+    id: 'ану кажи', kind: 'phrase', words: ['ану', 'кажи'],
+    meaning: "Reads one integer from standard input, literally come on, tell. It takes its type from context: `дрібняк` or `крупняк`.",
+    productions: [P.read],
+    syntax: 'ану кажи',
+    example: 'зуб даю х тіпа дрібняк це ану кажи',
     semantic: true,
   },
 ];
@@ -247,10 +300,33 @@ const KEYWORDS = [
   },
   {
     id: 'на', kind: 'keyword', words: ['на'],
-    meaning: "Multiplication (`*`), as in `2 на 3`. Left-associative; binds more tightly than `плюс` and `мінус`. Also the second word of `ділити на`; outside that phrase it means multiplication.",
+    meaning: "Multiplication (`*`), as in `2 на 3`. Left-associative; binds more tightly than `плюс` and `мінус`. Also the second word of `ділити на` and the first word of `на виході`; outside those phrases it means multiplication.",
     productions: [P.multiplicativeOperator],
     syntax: 'EXPR на EXPR',
     example: 'базарь 2 на 3',
+    semantic: true,
+  },
+  {
+    id: 'тримай', kind: 'keyword', words: ['тримай'],
+    meaning: "Leaves the function with a value, literally here, hold it. Equivalent: `return e`. Every path through a function ends with it, and its value has the function's result type.",
+    productions: [P.return],
+    syntax: 'тримай EXPR',
+    example: FUNCTION_EXAMPLE,
+    semantic: true,
+  },
+  {
+    id: 'порішали', kind: 'keyword', words: ['порішали'],
+    meaning: "Closes a function (`маю дєло`) or a structure (`такі діла`), literally settled. Occupies a separate line.",
+    productions: [P.function, P.structure],
+    syntax: 'маю дєло … порішали  |  такі діла … порішали',
+    example: FUNCTION_EXAMPLE,
+  },
+  {
+    id: 'склепай', kind: 'keyword', words: ['склепай'],
+    meaning: "Creates an object, literally knock it together. The values fill the fields in field order; fields left out take their defaults (auto constructor).",
+    productions: [P.newObject],
+    syntax: 'склепай TYPE(EXPR, …)',
+    example: STRUCTURE_EXAMPLE,
     semantic: true,
   },
 ];
@@ -274,6 +350,13 @@ const FRAGMENTS = [
   fragment('ше', 'і ше', "Second word of `і ше`. Reserved: it has no standalone meaning and cannot name a variable."),
   fragment('не', 'не рівно', "First word of `не рівно`. It is not logical negation and is not used on its own in expressions."),
   fragment('ділити', 'ділити на', "First word of `ділити на`. Has no standalone meaning; division requires the complete phrase."),
+  fragment('маю', 'маю дєло', "First word of `маю дєло`. Reserved: it has no standalone meaning and cannot name a variable."),
+  fragment('дєло', 'маю дєло', "Second word of `маю дєло`. Reserved: it has no standalone meaning and cannot name a variable."),
+  fragment('виході', 'на виході', "Second word of `на виході`. Reserved: it has no standalone meaning and cannot name a variable."),
+  fragment('такі', 'такі діла', "First word of `такі діла`. Reserved: it has no standalone meaning and cannot name a variable."),
+  fragment('діла', 'такі діла', "Second word of `такі діла`. Reserved: it has no standalone meaning and cannot name a variable."),
+  fragment('ану', 'ану кажи', "First word of `ану кажи`. Reserved: it has no standalone meaning and cannot name a variable."),
+  fragment('кажи', 'ану кажи', "Second word of `ану кажи`. Reserved: reading needs the complete phrase."),
 ];
 
 const COMMENT = {

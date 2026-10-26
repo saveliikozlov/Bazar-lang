@@ -1,9 +1,9 @@
 """Bridge between the VS Code extension and the Bazar parsing library.
 
-Read one stdin JSON object {"text": "..."}; call parse_program(); emit one
-stdout JSON line:
+Read one stdin JSON object {"text": "..."}; call parse_program() and the
+semantic pass; emit one stdout JSON line:
     {"ok": true}
-    {"ok": false, "error": {"kind": "lex"|"syntax", "line": L, "column": C, "message": "..."}}
+    {"ok": false, "error": {"kind": "lex"|"syntax"|"semantic", "line": L, "column": C, "message": "..."}}
     {"ok": false, "fatal": {"code": "...", "detail": "..."}}
 
 Positions are 1-based, with UTF-8 byte columns matching the compiler.
@@ -38,6 +38,7 @@ def main():
     try:
         from lexer import LexError
         from parser import CompilationError, parse_program
+        from semantic import analyze
     except Exception as error:  # missing or damaged backend
         return fatal("import", "%s: %s" % (type(error).__name__, error))
     try:
@@ -51,10 +52,13 @@ def main():
     # surrogatepass turns a lone JS surrogate into invalid UTF-8,
     # allowing the lexer to report it at the original byte position.
     data = text.encode("utf-8", "surrogatepass")
+    stage = "syntax"
     try:
-        parse_program(data)
+        tree = parse_program(data)
+        stage = "semantic"
+        analyze(tree)
     except (LexError, CompilationError) as error:
-        kind = "lex" if isinstance(error, LexError) else "syntax"
+        kind = "lex" if isinstance(error, LexError) else stage
         emit({"ok": False, "error": {"kind": kind, "line": error.line,
                                       "column": error.column, "message": error.message}})
         return 0

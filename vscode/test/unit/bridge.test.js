@@ -22,10 +22,17 @@ function bridge(text) {
 const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 const files = (dir) => fs.readdirSync(dir).filter((f) => f.endsWith('.bazar')).sort().map((f) => path.join(dir, f));
 
-test("all valid fixtures and examples parse successfully", () => {
-  const sources = [...files(path.join(root, 'tests', 'valid')), ...files(path.join(root, 'examples'))];
-  assert.ok(sources.length >= 40);
-  for (const file of sources) {
+test("all valid fixtures parse, and runnable programs pass the semantic pass", () => {
+  // Some Stage 1 front-end fixtures use undeclared names on purpose.
+  const parsed = files(path.join(root, 'tests', 'valid'));
+  assert.ok(parsed.length >= 40);
+  for (const file of parsed) {
+    const result = bridge(decoder.decode(fs.readFileSync(file)));
+    assert.ok(result.ok || result.error.kind === 'semantic', `${file}: ${JSON.stringify(result)}`);
+  }
+  const runnable = [...files(path.join(root, 'tests', 'run')), ...files(path.join(root, 'examples'))];
+  assert.ok(runnable.length >= 20);
+  for (const file of runnable) {
     assert.deepStrictEqual(bridge(decoder.decode(fs.readFileSync(file))), { ok: true }, file);
   }
 });

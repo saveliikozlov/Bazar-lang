@@ -12,7 +12,8 @@ test("empty prefix offers all language constructs", () => {
   const found = labels(at(''));
   for (const expected of ['желєзобетонно', 'зуб даю', 'мутна тєма', 'перевзувся … тепер', 'якшо реально', 'а нє', 'отакої', 'базарь',
     'всьо розходимось', 'чутки:', 'тіпа', 'це', 'дрібняк', 'крупняк', 'базар', 'реально', 'гон', 'плюс', 'мінус', 'на',
-    'ділити на', 'рівно', 'не рівно', 'більше', 'менше', 'і ше', 'або']) {
+    'ділити на', 'рівно', 'не рівно', 'більше', 'менше', 'і ше', 'або',
+    'маю дєло', 'такі діла', 'тримай', 'порішали', 'склепай', 'ану кажи']) {
     assert.ok(found.includes(expected), `missing ${expected}`);
   }
 });
@@ -62,10 +63,12 @@ test("declaration and condition snippets expand into valid programs", () => {
     .replace(/\\t|\t/g, '  ');
   for (const entry of ENTRIES.filter((e) => e.kind === 'statement')) {
     const program = expand(entry.snippet) + '\n';
-    if (['а нє', 'отакої'].includes(entry.label)) continue; // condition fragments are not standalone programs
+    if (['а нє', 'отакої', 'порішали', 'тримай'].includes(entry.label)) continue; // closers and тримай are not standalone programs
     if (entry.label === 'чутки:') continue;
     const out = execFileSync(python, ['-I', script], { input: JSON.stringify({ text: program }) }).toString();
-    assert.strictEqual(JSON.parse(out).ok, true, `${entry.label}: ${JSON.stringify(program)} -> ${out}`);
+    // A lone snippet such as «перевзувся name тепер 0» is valid syntax naming an undeclared variable.
+    const result = JSON.parse(out);
+    assert.ok(result.ok || result.error.kind === 'semantic', `${entry.label}: ${JSON.stringify(program)} -> ${out}`);
   }
 });
 

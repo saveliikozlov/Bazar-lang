@@ -4,6 +4,17 @@
   "scopeName": "source.bazar",
   "patterns": [
     {
+      "name": "string.quoted.double.bazar",
+      "begin": "\"",
+      "end": "\"|$",
+      "patterns": [
+        {
+          "name": "constant.character.escape.bazar",
+          "match": "\\\\[n\"\\\\]"
+        }
+      ]
+    },
+    {
       "name": "comment.line.bazar",
       "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(чутки:)(.*)$",
       "captures": {
@@ -51,6 +62,66 @@
           "name": "keyword.control.exit.bazar"
         }
       }
+    },
+    {
+      "name": "keyword.declaration.function.bazar",
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(маю)([ \\t]+)(дєло)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])",
+      "captures": {
+        "1": {
+          "name": "keyword.declaration.function.bazar"
+        },
+        "3": {
+          "name": "keyword.declaration.function.bazar"
+        }
+      }
+    },
+    {
+      "name": "keyword.declaration.struct.bazar",
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(такі)([ \\t]+)(діла)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])",
+      "captures": {
+        "1": {
+          "name": "keyword.declaration.struct.bazar"
+        },
+        "3": {
+          "name": "keyword.declaration.struct.bazar"
+        }
+      }
+    },
+    {
+      "name": "keyword.declaration.function.bazar",
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(на)([ \\t]+)(виході)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])",
+      "captures": {
+        "1": {
+          "name": "keyword.declaration.function.bazar"
+        },
+        "3": {
+          "name": "keyword.declaration.function.bazar"
+        }
+      }
+    },
+    {
+      "name": "support.function.read.bazar",
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(ану)([ \\t]+)(кажи)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])",
+      "captures": {
+        "1": {
+          "name": "support.function.read.bazar"
+        },
+        "3": {
+          "name": "support.function.read.bazar"
+        }
+      }
+    },
+    {
+      "name": "keyword.declaration.bazar",
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(?:порішали)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])"
+    },
+    {
+      "name": "keyword.control.return.bazar",
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(?:тримай)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])"
+    },
+    {
+      "name": "keyword.other.new.bazar",
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(?:склепай)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])"
     },
     {
       "name": "support.function.print.bazar",
@@ -127,6 +198,10 @@
     {
       "name": "punctuation.section.parens.end.bazar",
       "match": "\\)"
+    },
+    {
+      "name": "punctuation.separator.bazar",
+      "match": "[,.]"
     },
     {
       "name": "variable.other.bazar",
