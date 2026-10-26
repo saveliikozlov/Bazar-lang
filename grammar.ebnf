@@ -133,9 +133,9 @@ parameter = IDENT, "тіпа", type ;
 
 (* "такі діла" ("such are the things") declares a structure. Its body
    lists fields and member functions in any order, one per line, and ends
-   with "порішали". A field is declared like a variable but without "це":
-   "зуб даю" makes a constant field, "мутна тєма" a mutable one. Field
-   order is the declaration order. *)
+   with "порішали". A field is declared like a variable: "зуб даю" makes a
+   constant field, "мутна тєма" a mutable one. Field order is the
+   declaration order. *)
 structure_declaration = "такі", "діла", IDENT, NEWLINE,
                         { NEWLINE },
                         member, NEWLINE,
@@ -145,7 +145,11 @@ structure_declaration = "такі", "діла", IDENT, NEWLINE,
 member = field_declaration
        | function_declaration ;
 
-field_declaration = ( "зуб", "даю" | "мутна", "тєма" ), IDENT, "тіпа", type ;
+(* Auto constructor: "це" gives the field a default value, a constant
+   expression like the initializer of "желєзобетонно". "склепай" may then
+   leave the field out. *)
+field_declaration = ( "зуб", "даю" | "мутна", "тєма" ), IDENT, "тіпа", type,
+                    [ "це", expression ] ;
 
 (* Arguments of a call or of "склепай": expressions separated by commas,
    on the same line as the opening parenthesis. *)
@@ -202,7 +206,8 @@ primary = SMALL_INTEGER
 read_expression = "ану", "кажи" ;
 
 (* "склепай" ("knock together") creates an object: a structure name and
-   one argument per field, in field order. *)
+   values for the fields in field order. Trailing fields that have a
+   default may be left out: "склепай Точка()" uses every default. *)
 object_creation = "склепай", IDENT, arguments ;
 
 (* A name, optionally called, followed by any number of field accesses

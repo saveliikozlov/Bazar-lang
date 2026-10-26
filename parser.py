@@ -459,7 +459,7 @@ class Parser:
             raise self.unexpected("поле («зуб даю» чи «мутна тєма»), функцію «маю дєло» або «порішали»")
 
     def parse_field_declaration(self, index):
-        # ( "зуб", "даю" | "мутна", "тєма" ), IDENT, "тіпа", type
+        # ( "зуб", "даю" | "мутна", "тєма" ), IDENT, "тіпа", type, [ "це", expression ]
         first = self.eat()
         mutable = first.text == "мутна"
         if mutable:
@@ -470,9 +470,11 @@ class Parser:
         self.expect_keyword("тіпа", f"Де «тіпа», шеф? Після поля «{name.text}» треба вказати тип, а тут {{found}}.")
         type_at = self.peek()
         declared_type = self.parse_type()
+        default = None
         if self.at_keyword("це"):
-            raise self.error("Полю значення тут не дають: його задає «склепай» при створенні об'єкта.")
-        node = FieldNode(first.line, first.column, name.text, declared_type, mutable, index)
+            self.eat()
+            default = self.parse_expression()
+        node = FieldNode(first.line, first.column, name.text, declared_type, mutable, index, default)
         node.type_at = type_at
         return node
 

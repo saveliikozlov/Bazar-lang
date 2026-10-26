@@ -2,7 +2,9 @@ ProgramNode line=1 column=1
   StructureNode line=1 column=1 name=Точка
     fields:
       FieldNode line=2 column=5 name=х type=i32 mutable=true index=0
+        default: None
       FieldNode line=3 column=5 name=у type=i32 mutable=false index=1
+        default: None
     methods:
       FunctionNode line=6 column=5 name=д2 result=i32
         parameters: []

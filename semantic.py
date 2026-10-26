@@ -65,6 +65,9 @@ class FieldInfo:
     type: str
     mutable: bool
     index: int
+    node: object = None
+    default: object = None           # the value after це: int or bool; None without one
+    has_default: bool = False        # склепай may leave the field out (auto constructor)
 
 
 @dataclass(eq=False)
@@ -208,6 +211,9 @@ class Analyzer:
         for node in statements:
             if isinstance(node, ConstantDeclarationNode):
                 self.declare_constant(node, constant_scope)
+        for node in structures:
+            self.check_defaults(self.structures[node.name], constant_scope)
+        self.fill_auto_defaults()
         for node in statements:
             if isinstance(node, StructureNode):
                 for method in self.structures[node.name].methods.values():
@@ -240,7 +246,7 @@ class Analyzer:
                 raise error(field_node, f"Поле «{field_node.name}» в «{node.name}» вже є.")
             self.require_type(field_node.declared_type, field_node)
             structure.fields[field_node.name] = FieldInfo(
-                field_node.name, field_node.declared_type, field_node.mutable, field_node.index)
+                field_node.name, field_node.declared_type, field_node.mutable, field_node.index, field_node)
         for method in node.methods:
             if method.name in structure.methods:
                 raise error(method, f"Функція «{method.name}» в «{node.name}» вже є.")
@@ -284,6 +290,37 @@ class Analyzer:
         for node in structures:
             if node.name not in state:
                 visit(self.structures[node.name])
+
+    # ---------------------------------------------------- auto constructor
+
+    def check_defaults(self, structure, constants):
+        """A default after це is a constant expression of the field's type.
+
+        A structure-typed field has no це; it gets a default automatically
+        when every field of its structure has one, recursively."""
+        for info in structure.fields.values():
+            node = info.node
+            if node.default is None:
+                continue
+            if info.type not in BUILTIN_TYPES:
+                raise error(node.default, f"Поле «{info.name}» — об'єкт «{info.type}», йому «це» не пишуть: "
+                                          f"воно склепається саме, якщо всі поля «{info.type}» мають «це».")
+            context = Context(None, constants, const_only=True)
+            self.require(node.default, info.type, context)
+            info.default = self.evaluate(node.default)
+            info.has_default = True
+
+    def fill_auto_defaults(self):
+        # Structures may be declared in any order and contain each other, so
+        # repeat until no field changes (there are no cycles, rule 16).
+        changed = True
+        while changed:
+            changed = False
+            for structure in self.structures.values():
+                for info in structure.fields.values():
+                    if not info.has_default and info.type in self.structures and all(
+                            f.has_default for f in self.structures[info.type].fields.values()):
+                        info.has_default = changed = True
 
     # ----------------------------------------------------------- constants
 
@@ -532,8 +569,16 @@ class Analyzer:
                 raise error(node, f"Шо за структура «{node.structure}»? Такої «такі діла» нема.")
             structure = self.structures[node.structure]
             fields = list(structure.fields.values())
-            self.check_arguments(node, node.arguments, [f.type for f in fields],
-                                 f"«склепай {structure.name}»", context)
+            what = f"«склепай {structure.name}»"
+            if len(node.arguments) > len(fields):
+                raise error(node, f"{what} чекає не більше {count(len(fields))}, а дали {len(node.arguments)}.")
+            # Auto constructor: the values fill the first fields; the rest use their defaults.
+            given = fields[:len(node.arguments)]
+            for missing in fields[len(node.arguments):]:
+                if not missing.has_default:
+                    raise error(node, f"{what} не дав значення полю «{missing.name}», "
+                                      f"а свого «це» в нього нема.")
+            self.check_arguments(node, node.arguments, [f.type for f in given], what, context)
             return structure.name
         raise error(node, "Такий вираз тут не канає.")
 

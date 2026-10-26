@@ -262,8 +262,9 @@ class CodeGenerator:
                 return self.builder.load(self.address(node), name=node.field)
             return self.builder.extract_value(self.value(node.object), node.field_info.index)
         if isinstance(node, NewObjectNode):
-            struct_type = self.struct_types[node.structure]
-            value = ir.Constant(struct_type, ir.Undefined)
+            # Fields left out take their defaults: the object starts as the
+            # constant built from them, and the given values are inserted.
+            value = self.default_object(node.structure, len(node.arguments))
             for index, argument in enumerate(node.arguments):
                 value = self.builder.insert_value(value, self.value(argument), index)
             return value
@@ -282,6 +283,18 @@ class CodeGenerator:
             arguments = [pointer] + [self.value(a) for a in node.arguments]
             return self.builder.call(self.functions[node.target], arguments)
         raise AssertionError(f"no code for {type(node).__name__}")
+
+    def default_object(self, structure_name, given):
+        """A constant object: undef for the first given fields, then the defaults."""
+        fields = list(self.info.structures[structure_name].fields.values())
+        elements = [self.default_value(f) if f.index >= given else ir.Constant(self.lltype(f.type), ir.Undefined)
+                    for f in fields]
+        return ir.Constant(self.struct_types[structure_name], elements)
+
+    def default_value(self, field):
+        if field.type in SCALARS:
+            return ir.Constant(SCALARS[field.type], int(field.default))
+        return self.default_object(field.type, 0)
 
     def binary(self, node):
         operator = node.operator

@@ -2,12 +2,16 @@ ProgramNode line=2 column=1
   StructureNode line=2 column=1 name=Точка
     fields:
       FieldNode line=3 column=5 name=х type=i32 mutable=true index=0
+        default: None
       FieldNode line=4 column=5 name=у type=i32 mutable=true index=1
+        default: None
     methods: []
   StructureNode line=6 column=1 name=Коло
     fields:
       FieldNode line=7 column=5 name=центр type=Точка mutable=true index=0
+        default: None
       FieldNode line=8 column=5 name=радіус type=i32 mutable=false index=1
+        default: None
     methods: []
   DeclarationNode line=10 column=1 name=к type=Коло mutable=true
     initializer:

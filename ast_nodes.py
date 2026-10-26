@@ -264,15 +264,20 @@ class FunctionNode(StmtNode):
 class FieldNode(ASTNode):
     """A field: зуб даю NAME тіпа TYPE (constant) or мутна тєма ... (mutable).
 
-    index is the position among the structure's fields, counting from 0."""
+    index is the position among the structure's fields, counting from 0.
+    default is the constant expression after це, or None (auto constructor)."""
     name: str
     declared_type: str
     mutable: bool
     index: int
+    default: ExprNode | None = None
 
     def attributes(self):
         return (("name", self.name), ("type", self.declared_type),
                 ("mutable", _flag(self.mutable)), ("index", self.index))
+
+    def labelled_children(self):
+        return (("default", self.default),)
 
 
 @dataclass
