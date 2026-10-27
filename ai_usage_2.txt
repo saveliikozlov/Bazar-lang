@@ -1,0 +1,141 @@
+AI USAGE - Bazar, Stage 2 (code generation, functions and structures)
+Updated: 2026-10-26
+
+TOOLS
+-----
+- Claude (Anthropic), used through the Claude desktop app: a Claude Project
+  thread working in the repository folder on my Mac. It read the Stage 2
+  specification PDF, ran commands (git, python3, llc, lli, clang, npm) and
+  edited files. It committed locally after each step I approved; I pushed
+  and opened the pull request myself.
+- No other AI tools were used for Stage 2. Stage 1 AI usage is described in
+  ai_usage.txt.
+
+HOW WE WORKED
+-------------
+Step by step: for every step Claude proposed a design or showed a diff and
+test results, and waited for my approval before committing. Decisions on
+syntax, rules and wording were mine; Claude wrote most of the code, the
+tests and the documentation.
+
+PROMPTS
+-------
+My messages in the thread, as I sent them (typos kept). The Stage 2
+specification PDF (w07-project-stage2) was attached to the first one.
+
+ 1. "here we have stage 2 for out bazar lang. Let's check the repo status.
+    We will be working on the new branch stage2"
+ 2. "Yeah, let's begin from venv and requirements"
+ 3. "point to which new syntax words we need to create."
+ 4. "function declaration - є дєло
+    introduces the result type - на виході
+    leaves the function with a value (return) - тримай
+    function's end - порішали
+    declares a structure - такі діла
+    creates an object - склепай
+    read(), reads one integer - ану кажи
+
+    1. I proposed a different one - порішали
+    2. Keep it
+    3. Yes, it can be allowed."
+ 5. "let's go with маю дєло"
+ 6. "I accept the new grammar it is correct"
+ 7. "Yes, it looks fine!"
+ 8. "1. Yeah I think let's print the whole line.
+    2. I read and approve all of the rules."
+ 9. "I did not finds any issues. Let's move further"
+10. "Give me the example of the text if llvm not installed"
+11. "Yeah, let's change it to: "От фігня, llvmlite-у нема. Запусти через
+    .venv/bin/python або постав його командою «pip install -r
+    requirements.txt»,  тьфу ти нути.""
+12. "You may commit, but before writeing ai usage, I will create additional
+    feature, a little bit later."
+13. "I think we should implement auto constructor"
+14. "yes, you may commit it."
+15. "Okay, we may proceed with documentation."
+16. "It is good! Commit it"
+
+PARTS OF THE WORK: WHAT WAS TAKEN, WHAT WAS CHANGED AND WHY
+----------------------------------------------------------
+1. Toolchain (requirements.txt, .venv)
+   Taken as is: requirements.txt pinning llvmlite 0.49.0 (the version of my
+   practice repository) and a local .venv. Claude found that lli rejects a
+   module without a target triple, so the code generator sets it from
+   llvmlite.binding.get_default_triple().
+
+2. Syntax and grammar.ebnf
+   Claude proposed keywords (схема, віддає, банда, колись, ...). I replaced
+   most of them with my own: є дєло, на виході, тримай, порішали, такі
+   діла, склепай, ану кажи. Claude pointed out that "є" is a variable name
+   in a Stage 1 test (identifiers_ukrainian_letters), so making it a
+   keyword would break a valid Stage 1 program; I changed it to маю дєло.
+   I chose порішали as the closer of functions and structures, kept
+   склепай for object creation, and allowed a call on its own line.
+   Taken as is: the punctuation (",", ".", string literals with \n \" \\
+   escapes) and the EBNF text, after I reviewed the diff.
+
+3. Lexer, parser and AST (lexer.py, parser.py, ast_nodes.py)
+   Taken as is after review: STRING and ESCAPE lexer states, one parser
+   method per new grammar rule, 11 new AST nodes and list printing in
+   --ast. Changed during the work: a line starting with a name is a call
+   statement only when "(" or "." follows, so Stage 1 error messages stay
+   the same; "1.5" got its own message. Two Stage 1 fixtures changed because
+   the language changed: lex_string_literal_quote was deleted (strings are
+   now valid) and lex_decimal_point became syntax_decimal_point.
+
+4. Semantic rules and semantic.py
+   Claude proposed 26 rules; I read and approved them, and chose that
+   "всьо розходимось N" prints "Всьо, розходимось: N". Taken as is: the
+   symbol table, the order of the phases, the computation of mutating
+   member functions, and the error messages. Claude found and I accepted:
+   the Stage 1 tests/valid programs stay front-end (--ast) tests because
+   some use undeclared names; the deferred_semantics_* tests moved to
+   tests/invalid; the README example МІЛЬЙОН = ТИСЯЧА на ТИСЯЧА was a type
+   error under our own "no implicit conversion" rule and was fixed.
+
+5. Code generation (codegen.py, compiler.py)
+   Taken as is: identified struct types, "bz." function prefixes, one
+   function per (structure, member function) with a self pointer, printf /
+   scanf / write / exit declarations, overflow intrinsics, and printing an
+   object field by field. Changed by me: the message shown when llvmlite is
+   not installed (my own wording, prompt 11). Claude added that message
+   after noticing that compile mode printed a Python traceback without
+   llvmlite.
+
+6. Tests (tests/run, tests/invalid, check.py, unit tests)
+   Taken as is: 19 end-to-end programs with NAME.expected / NAME.in /
+   NAME.error, the compile-and-run part of check.py (lli, or llc and clang),
+   the semantic invalid tests and test_semantic.py. Claude computed every
+   expected output by hand before saving it.
+
+7. Extra feature: auto constructor (field defaults)
+   My choice of feature (prompt 13). Taken as is: "це" after a field gives
+   a constant default, склепай may leave trailing fields out, and an object
+   field is built automatically when all fields of its structure have
+   defaults. Changed: the Stage 1-era test that rejected "це" on a field
+   was removed because it is now valid syntax.
+
+8. Documentation and the VS Code extension
+   Taken as is after review: README.md (build steps, examples, the 25 rules
+   with the tests that follow and break each one), LANGUAGE.md,
+   EXAMPLES.md, the extension's dictionary, highlighting and completion for
+   the new keywords, and semantic error underlines in the editor.
+
+9. This file
+   Drafted by Claude from the thread; the next section is mine.
+
+WHAT I UNDERSTOOD
+-----------------
+The semantic pass, which runs after the parser and before codegen, was improved so
+it collects the structures and function signatures so a function can call one declared below it.
+So, all the functions can be called from anywhere.
+Then it checks bodies with a symbol table and works out which member
+functions are mutating by repeating until nothing changes, so it can keep tracking the
+mutated calls for each turn. Then add a lookup 
+mechanism inside the member function that checks whether the name is a parameter or some
+local variable, field of the structure or a constant, otherwise it reports an error, so can understand
+to what exactly variable or field we are trying to approach, keeping the local context.
+Furthermore, the codegen was appended to support structures using llvmlite struct type. There a field
+is reached with gep using its index from the symbol table, and a member function gets
+a pointer to the object as its first parameter, here every function is declared before any body
+is generated. Then add some runtime checks for overflow. And, finally, cover those with tests.
