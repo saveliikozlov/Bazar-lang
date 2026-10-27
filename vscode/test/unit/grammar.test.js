@@ -112,10 +112,33 @@ test("numbers require whole words; digits within identifiers are not numbers", a
   assert.strictEqual((await map('x2'))['x2'], 'variable.other.bazar');
 });
 
-test("Latin lookalikes are ordinary identifiers rather than keywords or strings", async () => {
+test("Latin lookalikes are ordinary identifiers; only double quotes make strings", async () => {
   // тіпa with a final Latin a
   const m = await map('тіпa x');
   assert.strictEqual(m['тіпa'], 'variable.other.bazar');
-  const all = [].concat(...await Promise.all(['зуб даю "a" \'b\''].map(scopes)));
+  const all = await scopes('зуб даю \'b\'');
   assert.ok(!all.some((t) => /string/.test(t[1])));
+  assert.ok((await scopes('базарь "a"')).some((t) => /string/.test(t[1])));
+});
+
+test("Stage 2: functions, structures, strings, and read", async () => {
+  const f = await map('маю дєло сума(а1 тіпа дрібняк) на виході дрібняк');
+  assert.strictEqual(f['маю'], 'keyword.declaration.function.bazar');
+  assert.strictEqual(f['дєло'], 'keyword.declaration.function.bazar');
+  assert.strictEqual(f['на'], 'keyword.declaration.function.bazar');
+  assert.strictEqual(f['виході'], 'keyword.declaration.function.bazar');
+  assert.strictEqual(f['сума'], 'variable.other.bazar');
+  const s = await map('такі діла Точка');
+  assert.strictEqual(s['такі'], 'keyword.declaration.struct.bazar');
+  assert.strictEqual(s['діла'], 'keyword.declaration.struct.bazar');
+  const r = await map('тримай склепай Точка(ану кажи, 2 на 3).х');
+  assert.strictEqual(r['тримай'], 'keyword.control.return.bazar');
+  assert.strictEqual(r['склепай'], 'keyword.other.new.bazar');
+  assert.strictEqual(r['ану'], 'support.function.read.bazar');
+  assert.strictEqual(r['на'], 'keyword.operator.arithmetic.bazar');
+  assert.strictEqual((await map('порішали'))['порішали'], 'keyword.declaration.bazar');
+  const tokens = await scopes('базарь "чутки: не коментар \\" тут" чутки: коментар');
+  assert.deepStrictEqual(tokens.find(([text]) => text.startsWith('чутки: не')), ['чутки: не коментар ', 'string.quoted.double.bazar']);
+  assert.deepStrictEqual(tokens.find(([text]) => text === '\\"'), ['\\"', 'constant.character.escape.bazar']);
+  assert.strictEqual(tokens[tokens.length - 1][1], 'comment.line.bazar');
 });

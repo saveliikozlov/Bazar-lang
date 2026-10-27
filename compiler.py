@@ -1,14 +1,17 @@
-"""Bazar compiler frontend: lexer, parser, and AST dump.
+"""Bazar compiler: lexer, parser, semantic analysis, and LLVM IR generation.
 
     python3 compiler.py --ast <input.bazar | input.txt>
+    python3 compiler.py <input.bazar | input.txt> <output.ll>
+
+--ast prints the AST after parsing. The second form also runs the semantic
+pass and writes the LLVM module to output.ll.
 
 Exit codes:
-    0: valid syntax; AST dump and final LF on stdout.
-    1: lexical or syntax error; empty stdout and one stderr line:
+    0: success; the AST dump on stdout, or output.ll written.
+    1: lexical, syntax, or semantic error; empty stdout, no output file, and
+       one stderr line:
            compilation error: line L:C: MESSAGE
-    2: invalid arguments or unreadable input.
-
-Semantic checking and code generation are not implemented.
+    2: invalid arguments, unreadable input, or unwritable output.
 """
 
 from pathlib import Path
@@ -16,19 +19,23 @@ import sys
 
 from lexer import LexError, compilation_error_line, describe_os_error, write_text
 from parser import CompilationError, parse_program
+from semantic import analyze
 
-USAGE = "Запускай так: python3 compiler.py --ast <input.bazar>"
+USAGE = ("Запускай так: python3 compiler.py --ast <input.bazar> "
+         "або python3 compiler.py <input.bazar> <output.ll>")
 
 
-def main(argv):
-    if len(argv) != 2 or argv[0] != "--ast":
-        write_text(sys.stderr, USAGE + "\n")
-        return 2
-    path = Path(argv[1])
+def read_source(path):
     try:
-        data = path.read_bytes()
+        return Path(path).read_bytes()
     except OSError as error:
         write_text(sys.stderr, f"Файл '{path}' не читається: {describe_os_error(error)}. Перевір шлях і доступ.\n")
+        return None
+
+
+def print_ast(path):
+    data = read_source(path)
+    if data is None:
         return 2
     try:
         tree = parse_program(data)
@@ -43,6 +50,41 @@ def main(argv):
         output.write(b"\n")
     output.flush()
     return 0
+
+
+def compile_file(source_path, output_path):
+    data = read_source(source_path)
+    if data is None:
+        return 2
+    try:
+        tree = parse_program(data)
+        info = analyze(tree)
+    except (LexError, CompilationError) as error:
+        write_text(sys.stderr, compilation_error_line(error))
+        return 1
+    # Imported here so that --ast works without llvmlite installed.
+    try:
+        from codegen import generate
+    except ImportError:
+        write_text(sys.stderr, "От фігня, llvmlite-у нема. Запусти через .venv/bin/python або постав "
+                               "його командою «pip install -r requirements.txt», тьфу ти нути.\n")
+        return 2
+    text = generate(tree, info)
+    try:
+        Path(output_path).write_text(text, encoding="utf-8")
+    except OSError as error:
+        write_text(sys.stderr, f"Файл '{output_path}' не записується: {describe_os_error(error)}.\n")
+        return 2
+    return 0
+
+
+def main(argv):
+    if len(argv) == 2 and argv[0] == "--ast":
+        return print_ast(argv[1])
+    if len(argv) == 2 and not argv[0].startswith("--") and not argv[1].startswith("--"):
+        return compile_file(argv[0], argv[1])
+    write_text(sys.stderr, USAGE + "\n")
+    return 2
 
 
 if __name__ == "__main__":

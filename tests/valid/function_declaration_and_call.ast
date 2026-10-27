@@ -1,0 +1,33 @@
+ProgramNode line=2 column=1
+  FunctionNode line=2 column=1 name=сума result=i32
+    parameters:
+      ParameterNode line=2 column=26 name=а1 type=i32
+      ParameterNode line=2 column=55 name=б1 type=i32
+    body:
+      BlockNode line=3 column=5
+        ReturnNode line=3 column=5
+          value:
+            BinaryNode line=3 column=22 operator=add
+              left:
+                IdentifierNode line=3 column=18 name=а1
+              right:
+                IdentifierNode line=3 column=31 name=б1
+  FunctionNode line=5 column=1 name=нуль result=i64
+    parameters: []
+    body:
+      BlockNode line=6 column=5
+        ReturnNode line=6 column=5
+          value:
+            IntegerNode line=6 column=18 value=0
+  DeclarationNode line=8 column=1 name=р type=i32 mutable=false
+    initializer:
+      CallNode line=8 column=47 name=сума
+        arguments:
+          CallNode line=8 column=56 name=сума
+            arguments:
+              IntegerNode line=8 column=65 value=1
+              IntegerNode line=8 column=68 value=2
+          IntegerNode line=8 column=72 value=3
+  ExitNode line=9 column=1
+    value:
+      IdentifierNode line=9 column=33 name=р

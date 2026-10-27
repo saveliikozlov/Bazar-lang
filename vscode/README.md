@@ -7,11 +7,13 @@ root `README.md`.
 ## Features
 
 - **Highlighting.** Keywords, types, Booleans, operators, numbers, parentheses,
-  and `чутки:` comments have distinct scopes. Matching uses complete words:
+  string literals with their escapes, and `чутки:` comments have distinct
+  scopes; `маю дєло`, `такі діла`, `тримай`, `склепай`, and `ану кажи` too. Matching uses complete words:
   `дрібняк_2` and `базарний` are not highlighted as keywords.
 - **Completion.** Phrases and constructs (`желєзобетонно`, `зуб даю`, `мутна тєма`,
   `якшо реально` with `а нє` and `отакої`, `базарь`, `всьо розходимось`,
-  operators, and types) are offered as snippets with defaults. Suggestions
+  `маю дєло`, `такі діла`, `тримай`, `склепай`, `ану кажи`, operators, and
+  types) are offered as snippets with defaults. Suggestions
   work with Cyrillic input and Ctrl+Space. A partial phrase such as `зуб д`
   is replaced as a whole, without duplicating `зуб`. Comments get no
   suggestions. Names declared in the file are also suggested; this does not
@@ -30,10 +32,12 @@ root `README.md`.
   document covering every word and phrase: meaning, grammar, syntax, and
   example. It works without Python, in untrusted workspaces, and outside
   Bazar projects. The same descriptions appear in completion documentation.
-- **Error underlines.** Lexical and syntax errors appear as red underlines
-  and in the Problems panel. Checking starts 250 ms after an edit, including
-  unsaved edits, and immediately after saving. The parser stops at the first
-  error, so one error is shown per file.
+- **Error underlines.** Lexical, syntax, and semantic errors (an unknown
+  name, a wrong argument count or type, a constant chain, a mutating call on
+  a constant object) appear as red underlines and in the Problems panel,
+  from the same semantic pass the compiler runs. Checking starts 250 ms after
+  an edit, including unsaved edits, and immediately after saving. The
+  compiler stops at the first error, so one error is shown per file.
 
 Completion, hover, dictionary help, and highlighting work without Python.
 Underlines require **Python 3.9 or newer**. Language keywords and all compiler

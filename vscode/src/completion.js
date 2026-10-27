@@ -33,6 +33,13 @@ const ENTRIES = [
     snippet: 'базарь ${1:0}' },
   { label: 'всьо розходимось', words: ['всьо', 'розходимось'], kind: 'statement', detail: 'exit with an integer result',
     snippet: 'всьо розходимось ${1:0}' },
+  { label: 'маю дєло', words: ['маю', 'дєло'], kind: 'statement', detail: 'function closed by порішали',
+    snippet: `маю дєло \${1:name}(\${2:x} тіпа дрібняк) на виході ${TYPES.replace('2', '3')}\n\tтримай \${4:x}\nпорішали` },
+  { label: 'такі діла', words: ['такі', 'діла'], kind: 'statement', detail: 'structure closed by порішали',
+    snippet: 'такі діла ${1:Name}\n\tмутна тєма ${2:field} тіпа дрібняк це ${3:0}\nпорішали' },
+  { label: 'тримай', words: ['тримай'], kind: 'statement', detail: 'return a value from the function',
+    snippet: 'тримай ${1:0}' },
+  { label: 'порішали', words: ['порішали'], kind: 'statement', detail: 'close a function or a structure', snippet: 'порішали' },
   { label: 'чутки:', words: ['чутки'], kind: 'statement', detail: 'comment through line end',
     snippet: 'чутки: ${1:comment}' },
   { label: 'тіпа', words: ['тіпа'], kind: 'keyword', detail: 'type follows the name', snippet: 'тіпа' },
@@ -52,6 +59,8 @@ const ENTRIES = [
   { label: 'менше', words: ['менше'], kind: 'operator', detail: 'less than', snippet: 'менше' },
   { label: 'і ше', words: ['і', 'ше'], kind: 'operator', detail: 'logical AND', snippet: 'і ше' },
   { label: 'або', words: ['або'], kind: 'operator', detail: 'logical OR', snippet: 'або' },
+  { label: 'склепай', words: ['склепай'], kind: 'keyword', detail: 'create an object', snippet: 'склепай ${1:Name}(${2})' },
+  { label: 'ану кажи', words: ['ану', 'кажи'], kind: 'keyword', detail: 'read one integer', snippet: 'ану кажи' },
 ];
 
 const documentationCache = new Map();

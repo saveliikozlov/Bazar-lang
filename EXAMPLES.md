@@ -1,9 +1,11 @@
 # Bazar examples
 
-Each program below is a file in [examples/](examples), parsed with
-`python3 compiler.py --ast examples/NAME.bazar`. `python3 check.py` checks them
-all. Larger valid and invalid suites, with expected ASTs or error lines, are
-in [tests/valid](tests/valid) and [tests/invalid](tests/invalid).
+Each program below is a file in [examples/](examples). Print its AST with
+`python3 compiler.py --ast examples/NAME.bazar`, or compile it with
+`.venv/bin/python compiler.py examples/NAME.bazar NAME.ll`. `check.py`
+compiles them all. Larger suites are in [tests/valid](tests/valid) (expected
+ASTs), [tests/invalid](tests/invalid) (expected error lines), and
+[tests/run](tests/run) (Stage 2 programs with their expected output).
 
 ## Valid programs
 
@@ -152,10 +154,10 @@ The same errors are covered by [tests/invalid](tests/invalid) fixtures with
 exact expected error lines. The `syntax_legacy_ru_*` fixtures deliberately
 contain the old Russian syntax to verify its rejection.
 
-## Valid syntax with invalid semantics (currently accepted)
+## Valid syntax with invalid semantics
 
-These programs match the grammar, so the parser accepts them and prints an
-AST. Semantic analysis is intended to reject them.
+These programs match the grammar, so `--ast` prints an AST, but compiling
+them reports a semantic error.
 
 ```text
 зуб даю x тіпа дрібняк це 1
@@ -182,7 +184,7 @@ Assignment to a constant.
 зуб даю x тіпа дрібняк це 2147483648
 ```
 
-The literal does not fit in `дрібняк` (i32): it is an overflow error under the intended semantic rules.
+The literal does not fit in `дрібняк` (i32): an overflow error.
 
 ```text
 якшо реально 123
@@ -192,4 +194,6 @@ The literal does not fit in `дрібняк` (i32): it is an overflow error unde
 
 A non-Boolean condition and an undeclared name.
 
-These are the `tests/valid/deferred_semantics_*.bazar` fixtures.
+These are covered by `tests/invalid/semantic_*.bazar`, one error per file,
+together with the Stage 2 rules: argument counts and types, `тримай` types,
+unknown fields, constant chains, and mutating calls on constant objects.

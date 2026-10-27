@@ -1,19 +1,23 @@
-# Bazar («Базар») — language specification, version 0.2
+# Bazar («Базар») — language specification, version 0.3
 
 Bazar is a small imperative language whose keywords are Ukrainian/surzhyk
 phrases. Its motto means: *Bazar is a language where you answer for your words.*
 Constructs use words instead of symbols and braces, and every `якшо реально`
 block ends explicitly with `отакої`. Source files use `.bazar`.
 
-This document describes the implemented lexer, parser, and AST, together
-with intended semantic rules that **are not yet enforced**. The authoritative
+This document describes the lexer, parser, AST, and semantics. Version 0.3
+(Stage 2) adds functions, structures, member functions, `ану кажи`, string
+printing, and the auto constructor; the semantic pass enforces every rule,
+and the compiler generates LLVM IR. The full numbered rule list is in
+[README.md](README.md#semantic-rules). The authoritative
 syntax is [grammar.ebnf](grammar.ebnf). Programs are in [examples/](examples)
 and explained in [EXAMPLES.md](EXAMPLES.md).
 
 ## 1. Statements
 
-Each statement occupies one physical line. Only `якшо реально` spans multiple
-lines; its `а нє` and `отакої` each occupy a separate line.
+Each statement occupies one physical line. `якшо реально`, `маю дєло`, and
+`такі діла` span multiple lines; their closers (`а нє`, `отакої`,
+`порішали`) each occupy a separate line.
 
 | Form | Meaning | Equivalent |
 | --- | --- | --- |
@@ -24,6 +28,15 @@ lines; its `а нє` and `отакої` each occupy a separate line.
 | `базарь EXPR` | print a value; literally talk | `print(e)` |
 | `всьо розходимось EXPR` | exit; literally everyone, go home | `exit(e)` |
 | `якшо реально EXPR` … `а нє` … `отакої` | condition with an optional else branch | `if e { … } else { … }` |
+| `перевзувся NAME.FIELD… тепер EXPR` | assignment to a field through a mutable chain | `o.f = e` |
+| `тримай EXPR` | leave the function with a value; literally here, hold it | `return e` |
+| `NAME(ARGS)`, `OBJ.NAME(ARGS)` | a call on its own line | `f(a)`, `o.m(a)` |
+| `маю дєло NAME(P тіпа T, …) на виході T` … `порішали` | function, top level; literally I have a business | `fn name(p: T) -> T { … }` |
+| `такі діла NAME` … `порішали` | structure with fields and member functions, top level | `struct Name { … }` |
+
+Expressions add calls `f(a, b)`, field access `o.f`, member calls `o.m(a)`,
+object creation `склепай T(a, b)`, and `ану кажи`, which reads one integer.
+`базарь` also prints a string literal `"…"` and an object.
 
 ```text
 чутки: time to count the money
@@ -56,9 +69,8 @@ lines; its `а нє` and `отакої` each occupy a separate line.
 - The true literal is also `реально`, so an always-true condition is written
   `якшо реально реально`. Both occurrences are required.
 - Indentation is ignored as ordinary horizontal whitespace.
-- There is no separate constant declaration. An immutable `зуб даю` variable
-  is the language's named constant. Integer and Boolean literals are constant
-  values in expressions.
+- `желєзобетонно` declares a named constant; `зуб даю` is an immutable
+  variable whose value is known only at run time.
 
 ## 2. Types
 
@@ -67,6 +79,7 @@ lines; its `а нє` and `отакої` each occupy a separate line.
 | `дрібняк` | signed 32-bit integer | `i32` | −2147483648 … 2147483647 |
 | `крупняк` | signed 64-bit integer | `i64` | −9223372036854775808 … 9223372036854775807 |
 | `базар` | Boolean | `bool` | `реально` (true) / `гон` (false) |
+| a `такі діла` name | object, copied as a value | the structure name | its fields |
 
 ## 3. Expressions
 
@@ -154,11 +167,12 @@ EOF is positioned immediately after the last input byte.
   block, every statement, including a nested condition, ends with a newline
   so `а нє` and `отакої` can start their own lines.
 
-## 5. Intended semantics (not yet enforced)
+## 5. Semantics
 
-The parser accepts every grammatically valid program. These rules are part
-of the design but **are not currently enforced**. Programs violating them
-still produce an AST; see the `deferred_semantics_*` tests.
+The semantic pass ([semantic.py](semantic.py)) enforces these Stage 1 rules
+and the Stage 2 rules listed in [README.md](README.md#semantic-rules). The
+parser still accepts every grammatically valid program, so `--ast` prints an
+AST for programs that break them; compiling reports the first broken rule.
 
 - **Names.** Declare a name before using it. Redeclaration in the same scope
   is an error. An initializer cannot see the name being declared. The program
@@ -193,9 +207,9 @@ still produce an AST; see the `deferred_semantics_*` tests.
   is an error and never wraps. Division truncates toward zero; division
   by zero and `MIN ділити на мінус 1` are errors.
 
-Semantic checking is deferred rather than mixed into parsing.
+Semantic checking is a separate pass, not mixed into parsing.
 `зуб даю x тіпа дрібняк це 2147483648` matches the grammar, so the parser
-accepts it; only literals too large for every type are rejected now. Syntax tests cover type and literal spelling errors: missing or
+accepts it, and the semantic pass rejects it. Syntax tests cover type and literal spelling errors: missing or
 misspelled types, `12abc`, `0x1F`, `10L`, `12_3`, `1.5`, `-1`, and `+`.
 
 ## 6. Abstract syntax tree
@@ -209,12 +223,25 @@ ASTNode(line, column)
 │   ├── DeclarationNode(name, declared_type, mutable, initializer)
 │   ├── AssignmentNode(name, value)
 │   ├── IfNode(condition, then_body, else_body)   else_body may be None
-│   ├── PrintNode(value)
-│   └── ExitNode(value)
+│   ├── PrintNode(value)                   value may be a StringNode
+│   ├── ExitNode(value)
+│   ├── ReturnNode(value)
+│   ├── CallStatementNode(call)            member_call flag
+│   ├── FieldAssignmentNode(target, value)
+│   ├── FunctionNode(name, parameters, result_type, body)
+│   └── StructureNode(name, fields, methods)
+├── ParameterNode(name, declared_type)
+├── FieldNode(name, declared_type, mutable, index, default)
 └── ExprNode
     ├── IntegerNode(value)                 digits without leading zeros
     ├── BooleanNode(value)                 True / False
     ├── IdentifierNode(name)
+    ├── StringNode(value)                  escapes resolved
+    ├── ReadNode()                         ану кажи
+    ├── CallNode(name, arguments)
+    ├── FieldAccessNode(object, field)
+    ├── MemberCallNode(object, method, arguments)
+    ├── NewObjectNode(structure, arguments)
     ├── UnaryNode(operator, operand)       operator = neg
     └── BinaryNode(operator, left, right)  add sub mul div eq ne gt lt and or
 ```
@@ -244,5 +271,5 @@ See [README.md](README.md#ast-dump-format) for the `compiler.py --ast` dump form
 
 ## 8. Features absent from this version
 
-Loops, strings, functions, returns, and calls are not part of the grammar;
-the parser rejects their syntax.
+Loops, string variables, logical NOT, and floating-point numbers are not
+part of the grammar. Strings exist only as the operand of `базарь`.
