@@ -170,6 +170,19 @@ def is_comparable(t):
     return is_scalar(t)
 
 
+def byte_size(t, fields_of):
+    """About how many bytes a value of t takes, padding aside; fields_of(name) lists a structure's field types."""
+    if isinstance(t, IntType):
+        return t.bits // 8
+    if isinstance(t, BoolType):
+        return 1
+    if isinstance(t, StructType):
+        return sum(byte_size(field, fields_of) for field in fields_of(t.name))
+    if isinstance(t, ArrayType):
+        return t.length * byte_size(t.element, fields_of)
+    return 1 + sum(byte_size(inner, fields_of) for inner in payloads(t))     # може, вийде: the tag first
+
+
 def contained_structs(t):
     """The names of the structures that a value of type t holds directly, by value."""
     if isinstance(t, StructType):

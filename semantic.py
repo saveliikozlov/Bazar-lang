@@ -43,7 +43,7 @@ from ast_nodes import (
 )
 from bazar_types import (
     BOOL, BUILTIN_TYPES, I32, I64, STRING, ArrayType, OptionType, ResultType, StructType, Type,
-    contained_structs, is_comparable, is_integer, is_scalar, is_variant,
+    byte_size, contained_structs, is_comparable, is_integer, is_scalar, is_variant,
 )
 from exhaustiveness import Alt, Con, Wild, show, useful
 from parser import CompilationError
@@ -52,6 +52,7 @@ ARITHMETIC = ("add", "sub", "mul", "div")
 LENGTH = "розмір"                    # the only field of an array
 CHECKS = {"шось": "some", "нема": "none", "вийшло": "ok", "облом": "err"}   # з.шось and the others
 MAX_ARRAY_LENGTH = 2**31 - 1
+MAX_VALUE_BYTES = 2**40              # 1 TiB: no larger value fits a machine, and sizes stay far from 2**63
 ORDERING = ("gt", "lt")
 EQUALITY = ("eq", "ne")
 LOGIC = ("and", "or")
@@ -281,6 +282,8 @@ class Analyzer:
         self.functions = {}
         self.constants = {}
         self.member_calls = []
+        self.sizes_pending = []          # (array type, its node) until every structure has its fields
+        self.structures_complete = False
 
     # ---------------------------------------------------------- top level
 
@@ -302,6 +305,9 @@ class Analyzer:
         for node in structures:
             self.declare_members(self.structures[node.name])
         self.check_structure_cycles(structures)
+        self.structures_complete = True
+        for array_type, node in self.sizes_pending:
+            self.check_size(array_type, node)
         for node in structures:
             self.check_defaults(self.structures[node.name], constant_scope)
         self.fill_auto_defaults()
@@ -362,7 +368,9 @@ class Analyzer:
         context is where the type is written, for the constants an array size
         may use; None is a signature or a field, which see every constant."""
         if isinstance(node, ArrayTypeNode):
-            return ArrayType(self.resolve_type(node.element, context), self.array_length(node.size, context))
+            array_type = ArrayType(self.resolve_type(node.element, context), self.array_length(node.size, context))
+            self.check_size(array_type, node)
+            return array_type
         if isinstance(node, OptionTypeNode):
             return OptionType(self.resolve_type(node.inner, context))
         if isinstance(node, ResultTypeNode):
@@ -383,6 +391,16 @@ class Analyzer:
         if not 1 <= length <= MAX_ARRAY_LENGTH:
             raise error(node, f"Розмір масиву має бути від 1 до {MAX_ARRAY_LENGTH}, а тут {length}.")
         return length
+
+    def check_size(self, array_type, node):
+        # Rule 33: a value of at most MAX_VALUE_BYTES; nested lengths multiply.
+        if not self.structures_complete:
+            self.sizes_pending.append((array_type, node))
+            return
+        size = byte_size(array_type, lambda name: [f.type for f in self.structures[name].fields.values()])
+        if size > MAX_VALUE_BYTES:
+            raise error(node, f"Масив «{word(array_type)}» завеликий: це {size} байтів, а одне значення "
+                              f"в Базарі може мати до {MAX_VALUE_BYTES} байтів (1 ТіБ).")
 
     def visible_constants(self, context):
         """The constants a name in context refers to: rule 6, 7, 8 without the non-constants."""
