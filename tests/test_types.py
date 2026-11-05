@@ -7,8 +7,8 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from bazar_types import (  # noqa: E402
-    BOOL, BUILTIN_TYPES, I32, I64, STRING, BoolType, IntType, StructType, contained_structs, is_comparable,
-    is_integer, is_scalar,
+    BOOL, BUILTIN_TYPES, I32, I64, STRING, ArrayType, BoolType, IntType, StructType, contained_structs,
+    is_aggregate, is_comparable, is_integer, is_scalar,
 )
 
 
@@ -57,6 +57,28 @@ class TypePredicateTest(unittest.TestCase):
     def test_contained_structs(self):
         self.assertEqual(contained_structs(StructType("Точка")), ["Точка"])
         self.assertEqual(contained_structs(I32), [])
+        self.assertEqual(contained_structs(ArrayType(ArrayType(StructType("Точка"), 2), 3)), ["Точка"])
+
+
+class ArrayTypeTest(unittest.TestCase):
+    def test_equal_by_element_and_length(self):
+        self.assertEqual(ArrayType(I32, 3), ArrayType(IntType(32), 3))
+        self.assertNotEqual(ArrayType(I32, 3), ArrayType(I32, 4))
+        self.assertNotEqual(ArrayType(I32, 3), ArrayType(I64, 3))
+        self.assertEqual({ArrayType(I32, 3): 1}[ArrayType(I32, 3)], 1)
+
+    def test_spellings(self):
+        grid = ArrayType(ArrayType(BOOL, 2), 3)
+        self.assertEqual((str(grid), grid.word), ("[[bool; 2]; 3]", "[[базар; 2]; 3]"))
+
+    def test_predicates(self):
+        point = StructType("Точка")
+        self.assertTrue(is_aggregate(ArrayType(I32, 1)))
+        self.assertTrue(is_aggregate(point))
+        self.assertFalse(is_aggregate(I32))
+        self.assertTrue(is_comparable(ArrayType(ArrayType(BOOL, 2), 2)))
+        self.assertFalse(is_comparable(ArrayType(point, 2)))
+        self.assertFalse(is_scalar(ArrayType(I32, 1)))
 
 
 if __name__ == "__main__":

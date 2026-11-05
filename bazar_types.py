@@ -7,6 +7,7 @@ be dictionary keys:
 * IntType(32) and IntType(64): дрібняк and крупняк;
 * BoolType(): базар;
 * StructType(name): an object of a такі діла structure;
+* ArrayType(element, length): a fixed-size array, [дрібняк; 5];
 * StringType(): a string literal, the operand of базарь; it cannot be written
   as a type.
 
@@ -73,6 +74,19 @@ class StructType(Type):
 
 
 @dataclass(frozen=True)
+class ArrayType(Type):
+    element: Type
+    length: int
+
+    def __str__(self):
+        return f"[{self.element}; {self.length}]"
+
+    @property
+    def word(self):
+        return f"[{self.element.word}; {self.length}]"
+
+
+@dataclass(frozen=True)
 class StringType(Type):
     def __str__(self):
         return "string"
@@ -103,12 +117,14 @@ def is_scalar(t):
 
 
 def is_aggregate(t):
-    """A type whose values live in memory and are copied as a block: a structure."""
-    return isinstance(t, StructType)
+    """A type whose values live in memory and are copied as a block: a structure or an array."""
+    return isinstance(t, (StructType, ArrayType))
 
 
 def is_comparable(t):
-    """A type whose values рівно and не рівно compare."""
+    """A type whose values рівно and не рівно compare: a scalar or an array of comparable elements."""
+    if isinstance(t, ArrayType):
+        return is_comparable(t.element)
     return is_scalar(t)
 
 
@@ -116,4 +132,6 @@ def contained_structs(t):
     """The names of the structures that a value of type t holds directly, by value."""
     if isinstance(t, StructType):
         return [t.name]
+    if isinstance(t, ArrayType):
+        return contained_structs(t.element)
     return []

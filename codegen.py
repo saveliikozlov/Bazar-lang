@@ -7,7 +7,8 @@ has .type, names have .ref, calls have .target, field accesses .field_info.
 The only IR text the compiler writes is str(module), printed by llvmlite.
 
 Layout of the module:
-* an identified struct type "bz.T" per structure, fields in field order;
+* an identified struct type "bz.T" per structure, fields in field order, and
+  an LLVM array type [N x T] per Bazar array type;
 * "bz.NAME" per function and "bz.T.NAME" per member function, whose first
   parameter is a pointer to the object; the prefix keeps a function named
   main or printf apart from the C runtime;
@@ -27,19 +28,21 @@ that the callee only reads; an object result is written through a hidden first
 parameter that points to memory of the caller.
 
 Arithmetic uses the *.with.overflow intrinsics; an overflow, a division by
-zero, or MIN ділити на мінус 1 writes one line to stderr and exits with 1.
+zero, MIN ділити на мінус 1, or an array index out of range writes one line to
+stderr and exits with 1. Code that walks an array (filling, printing,
+comparing, крутимось … з) is a loop at run time, never unrolled.
 """
 
 from llvmlite import ir
 import llvmlite.binding as llvm
 
 from ast_nodes import (
-    AssignmentNode, BinaryNode, BooleanNode, BreakNode, CallNode, CallStatementNode, DeclarationNode,
+    ArrayFillNode, ArrayLiteralNode, ForEachNode, IndexNode, AssignmentNode, BinaryNode, BooleanNode, BreakNode, CallNode, CallStatementNode, DeclarationNode,
     ExitNode, FieldAccessNode, FieldAssignmentNode, ForNode, IdentifierNode, IfNode, IntegerNode,
     MemberCallNode, NewObjectNode, PrintNode, ReadNode, ReturnNode, StringNode, UnaryNode, WhileNode, walk,
 )
-from bazar_types import BoolType, IntType, StructType, is_aggregate, is_scalar
-from semantic import FieldInfo
+from bazar_types import ArrayType, BoolType, IntType, StructType, is_aggregate, is_scalar
+from semantic import FieldInfo, is_name_chain
 
 I1, I8, I32, I64 = ir.IntType(1), ir.IntType(8), ir.IntType(32), ir.IntType(64)
 I8_PTR = I8.as_pointer()
@@ -110,6 +113,8 @@ class CodeGenerator:
             return I1
         if isinstance(t, StructType):
             return self.struct_types[t.name]
+        if isinstance(t, ArrayType):
+            return ir.ArrayType(self.lltype(t.element), t.length)
         raise AssertionError(f"no LLVM type for {t}")
 
     def string(self, text):
@@ -234,6 +239,8 @@ class CodeGenerator:
             self.while_statement(node)
         elif isinstance(node, ForNode):
             self.for_statement(node)
+        elif isinstance(node, ForEachNode):
+            self.for_each_statement(node)
         elif isinstance(node, BreakNode):
             self.builder.branch(self.loop_ends[-1])
         # Constant, function, and structure declarations produce no statements.
@@ -312,6 +319,48 @@ class CodeGenerator:
         self.builder.branch(body_block)                       # the back edge
         self.builder.position_at_end(end_block)
 
+    def for_each_statement(self, node):
+        # The array is evaluated once. The counter is the element itself, read
+        # in place: it cannot be assigned, and the array is a snapshot whenever
+        # the body could change the original.
+        if addressable(node.array) and not changes_objects(node.body):
+            array = self.pointer(node.array)
+        else:
+            array = self.snapshot(node.array)
+        length = ir.Constant(I64, node.array.type.length)
+        slot = self.alloca(I64, node.name + ".номер")
+        self.builder.store(ir.Constant(I64, 0), slot)
+        body_block = self.new_block("each.body")
+        step_block = self.new_block("each.step")
+        end_block = self.new_block("each.end")
+        self.builder.branch(body_block)
+        self.builder.position_at_end(body_block)
+        self.slots[node.info] = self.builder.gep(array, [ir.Constant(I32, 0), self.builder.load(slot)],
+                                                 name=node.name)
+        self.loop_body(node.body, end_block, step_block)
+        self.builder.position_at_end(step_block)
+        following = self.builder.add(self.builder.load(slot), ir.Constant(I64, 1))
+        self.builder.store(following, slot)
+        self.builder.cbranch(self.builder.icmp_signed("==", following, length), end_block, body_block)
+        self.builder.position_at_end(end_block)
+
+    def counted_loop(self, start, stop, body):
+        """Run body(index) for every i64 index from start to stop - 1; nothing when start >= stop."""
+        if start >= stop:
+            return
+        slot = self.alloca(I64)
+        self.builder.store(ir.Constant(I64, start), slot)
+        body_block = self.new_block("loop.body")
+        end_block = self.new_block("loop.end")
+        self.builder.branch(body_block)
+        self.builder.position_at_end(body_block)
+        index = self.builder.load(slot)
+        body(index)
+        following = self.builder.add(index, ir.Constant(I64, 1))
+        self.builder.store(following, slot)
+        self.builder.cbranch(self.builder.icmp_signed("==", following, ir.Constant(I64, stop)), end_block, body_block)
+        self.builder.position_at_end(end_block)
+
     # -------------------------------------------------------------- print
 
     def print_statement(self, node):
@@ -342,6 +391,18 @@ class CodeGenerator:
                 separator = opening + " " if number == 0 else ", "
                 closing = " }" + suffix if number == len(fields) - 1 else ""
                 self.print_value(field_value, field.type, f"{separator}{field.name}: ", closing)
+        elif isinstance(t, ArrayType):
+            # [a, b, c]: the first element, then a loop over the rest with ", " before each.
+            def show(index, element_prefix, element_suffix):
+                pointer = self.builder.gep(value, [ir.Constant(I32, 0), index])
+                element = pointer if is_aggregate(t.element) else self.builder.load(pointer)
+                self.print_value(element, t.element, element_prefix, element_suffix)
+
+            closing = "]" + suffix
+            show(ir.Constant(I64, 0), prefix + "[", closing if t.length == 1 else "")
+            if t.length > 1:
+                self.counted_loop(1, t.length, lambda index: show(index, ", ", ""))
+                self.builder.call(self.printf, [self.string("%s"), self.string(closing)])
         else:
             raise AssertionError(f"no printing for {t}")
 
@@ -369,8 +430,15 @@ class CodeGenerator:
                                 operand, node, "мінус")
         if isinstance(node, BinaryNode):
             return self.binary(node)
+        if isinstance(node, FieldAccessNode) and node.field_info is None:
+            # розмір of an array is known now; the array still runs if it is more than a name.
+            if not is_name_chain(node.object):
+                self.pointer(node.object)
+            return ir.Constant(self.lltype(node.type), node.length)
         if isinstance(node, FieldAccessNode):
             return self.builder.load(self.pointer(node), name=node.field)
+        if isinstance(node, IndexNode):
+            return self.builder.load(self.pointer(node))
         if isinstance(node, (CallNode, MemberCallNode)):
             return self.call(node, None)
         raise AssertionError(f"no scalar code for {type(node).__name__}")
@@ -391,7 +459,23 @@ class CodeGenerator:
         if isinstance(node, FieldAccessNode):
             # A field is reached with a gep by its index from the symbol table.
             return self.element(self.pointer(node.object), node.field_info.index, node.field)
+        if isinstance(node, IndexNode):
+            array = self.pointer(node.object)
+            return self.builder.gep(array, [ir.Constant(I32, 0), self.checked_index(node)])
         return self.snapshot(node)
+
+    def checked_index(self, node):
+        """The index as i64; one unknown before the run is compared with the length.
+
+        An unsigned comparison catches a negative index too."""
+        index = self.value(node.index)
+        if index.type != I64:
+            index = self.builder.sext(index, I64)
+        length = node.object.type.length
+        if node.index_value is None:
+            self.fail_if(self.builder.icmp_unsigned(">=", index, ir.Constant(I64, length)), node.index,
+                         f"номер за межами масиву: тут можна від 0 до {length - 1}")
+        return index
 
     def snapshot(self, node):
         """A fresh temporary holding the value of an object expression."""
@@ -405,8 +489,37 @@ class CodeGenerator:
             self.build_object(destination, node)
         elif isinstance(node, (CallNode, MemberCallNode)):
             self.call(node, destination)
+        elif isinstance(node, ArrayLiteralNode):
+            for index, item in enumerate(node.elements):
+                self.store_value(self.element(destination, index), item)
+        elif isinstance(node, ArrayFillNode):
+            self.fill(destination, node)
         else:
             self.copy(destination, self.pointer(node), node.type)
+
+    def store_value(self, pointer, node):
+        """Write the value of any expression to memory that node cannot see."""
+        if is_aggregate(node.type):
+            self.emit_into(pointer, node)
+        else:
+            self.builder.store(self.value(node), pointer)
+
+    def fill(self, destination, node):
+        """[всюди x]: x runs once and goes to element 0, which a loop copies to the rest."""
+        element_type = node.type.element
+        first = self.element(destination, 0)
+        if is_aggregate(element_type):
+            self.emit_into(first, node.value)
+
+            def put(index):
+                self.copy(self.builder.gep(destination, [ir.Constant(I32, 0), index]), first, element_type)
+        else:
+            value = self.value(node.value)
+            self.builder.store(value, first)
+
+            def put(index):
+                self.builder.store(value, self.builder.gep(destination, [ir.Constant(I32, 0), index]))
+        self.counted_loop(1, node.type.length, put)
 
     def build_object(self, destination, node):
         """склепай: the given values in field order, then the defaults of the fields left out."""
@@ -414,10 +527,8 @@ class CodeGenerator:
             pointer = self.element(destination, field.index)
             if field.index >= len(node.arguments):
                 self.store_default(pointer, field)
-            elif is_aggregate(field.type):
-                self.emit_into(pointer, node.arguments[field.index])
             else:
-                self.builder.store(self.value(node.arguments[field.index]), pointer)
+                self.store_value(pointer, node.arguments[field.index])
 
     def store_default(self, pointer, field):
         if is_scalar(field.type):
@@ -468,6 +579,8 @@ class CodeGenerator:
         operator = node.operator
         if operator in ("and", "or"):
             return self.short_circuit(node)
+        if is_aggregate(node.left.type):
+            return self.array_comparison(node)
         left = self.value(node.left)
         right = self.value(node.right)
         if operator in COMPARISONS:
@@ -479,6 +592,31 @@ class CodeGenerator:
         if operator == "mul":
             return self.checked(self.builder.smul_with_overflow, left, right, node, "на")
         return self.division(left, right, node)
+
+    def array_comparison(self, node):
+        """рівно and не рівно on arrays: element by element.
+
+        Not memcmp: LLVM leaves the unused bits of a stored базар unspecified.
+        A borrowed left array is a snapshot when the right side may change it."""
+        if addressable(node.left) and has_call(node.right):
+            left = self.snapshot(node.left)
+        else:
+            left = self.pointer(node.left)
+        same = self.equal(left, self.pointer(node.right), node.left.type)
+        return same if node.operator == "eq" else self.builder.not_(same)
+
+    def equal(self, left, right, t):
+        if is_scalar(t):
+            return self.builder.icmp_signed("==", self.builder.load(left), self.builder.load(right))
+        result = self.alloca(I1)
+        self.builder.store(ir.Constant(I1, 1), result)
+
+        def compare(index):
+            same = self.equal(self.builder.gep(left, [ir.Constant(I32, 0), index]),
+                              self.builder.gep(right, [ir.Constant(I32, 0), index]), t.element)
+            self.builder.store(self.builder.and_(self.builder.load(result), same), result)
+        self.counted_loop(0, t.length, compare)
+        return self.builder.load(result)
 
     def short_circuit(self, node):
         left = self.value(node.left)
@@ -539,9 +677,15 @@ def addressable(node):
     """A chain of names and fields that lives in memory, not a temporary."""
     if isinstance(node, IdentifierNode):
         return isinstance(node.ref, FieldInfo) or node.ref.kind != "const"
-    if isinstance(node, FieldAccessNode):
+    if isinstance(node, (FieldAccessNode, IndexNode)):
         return addressable(node.object)
     return False
+
+
+def changes_objects(node):
+    """Whether running node may change memory that already exists: a call or an assignment."""
+    return any(isinstance(item, (CallNode, MemberCallNode, AssignmentNode, FieldAssignmentNode))
+               for item in walk(node))
 
 
 def has_call(node):

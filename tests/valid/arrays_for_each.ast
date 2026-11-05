@@ -1,0 +1,16 @@
+ProgramNode line=2 column=1
+  DeclarationNode line=2 column=1 name=з type=[i32; 3] mutable=true
+    initializer:
+      ArrayLiteralNode line=2 column=58
+        elements:
+          IntegerNode line=2 column=59 value=4
+          IntegerNode line=2 column=62 value=5
+          IntegerNode line=2 column=65 value=6
+  ForEachNode line=3 column=1 name=е type=i32
+    array:
+      IdentifierNode line=3 column=50 name=з
+    body:
+      BlockNode line=4 column=5
+        PrintNode line=4 column=5
+          value:
+            IdentifierNode line=4 column=18 name=е

@@ -21,13 +21,12 @@ reports the same position.
 """
 
 from ast_nodes import (
-    AssignmentNode, ASTNode, BinaryNode, BlockNode, BooleanNode, CallNode, CallStatementNode,
+    ArrayFillNode, ArrayLiteralNode, ForEachNode, IndexNode, AssignmentNode, ASTNode, BinaryNode, BlockNode, BooleanNode, CallNode, CallStatementNode,
     DeclarationNode, ExitNode, FieldAccessNode, FieldAssignmentNode, ForNode, FunctionNode,
     IdentifierNode, IfNode, IntegerNode, MemberCallNode, NewObjectNode, PrintNode, ReturnNode,
     StructureNode, UnaryNode, WhileNode, walk,
 )
-from bazar_types import is_integer
-from semantic import VarInfo
+from semantic import VarInfo, constant_value
 
 ARITHMETIC = ("add", "sub", "mul", "div")
 
@@ -102,37 +101,6 @@ def remove_unused_functions(program, info):
 
 # ---------------------------------------------------------- unused variables
 
-def constant_value(node):
-    """The value of an integer expression known now, or None if it is unknown or overflows."""
-    if isinstance(node, IntegerNode):
-        return int(node.value)
-    if isinstance(node, IdentifierNode):
-        known = isinstance(node.ref, VarInfo) and node.ref.kind == "const"
-        return node.ref.value if known and is_integer(node.ref.type) else None
-    if isinstance(node, UnaryNode):
-        operand = constant_value(node.operand)
-        value = None if operand is None else -operand
-    elif isinstance(node, BinaryNode) and node.operator in ARITHMETIC:
-        left, right = constant_value(node.left), constant_value(node.right)
-        if left is None or right is None or (node.operator == "div" and right == 0):
-            return None
-        if node.operator == "add":
-            value = left + right
-        elif node.operator == "sub":
-            value = left - right
-        elif node.operator == "mul":
-            value = left * right
-        else:
-            quotient = abs(left) // abs(right)
-            value = quotient if (left < 0) == (right < 0) else -quotient
-    else:
-        return None
-    if value is None:
-        return None
-    low, high = node.type.range
-    return value if low <= value <= high else None
-
-
 def can_drop(node):
     """Whether removing an expression cannot change what the program does.
 
@@ -143,8 +111,15 @@ def can_drop(node):
         return True
     if isinstance(node, FieldAccessNode):
         return can_drop(node.object)
+    if isinstance(node, IndexNode):
+        # An index the semantic pass knows is inside the array; any other may stop the program.
+        return can_drop(node.object) and node.index_value is not None
     if isinstance(node, NewObjectNode):
         return all(can_drop(argument) for argument in node.arguments)
+    if isinstance(node, ArrayLiteralNode):
+        return all(can_drop(item) for item in node.elements)
+    if isinstance(node, ArrayFillNode):
+        return can_drop(node.value)
     if isinstance(node, BinaryNode) and node.operator not in ARITHMETIC:
         return can_drop(node.left) and can_drop(node.right)
     if isinstance(node, (UnaryNode, BinaryNode)):
@@ -153,9 +128,21 @@ def can_drop(node):
 
 
 def place_root(node):
-    while isinstance(node, FieldAccessNode):
+    while isinstance(node, (FieldAccessNode, IndexNode)):
         node = node.object
     return node
+
+
+def place_chain(node):
+    """The steps of an assignment target down to its name, without its index expressions."""
+    while isinstance(node, (FieldAccessNode, IndexNode)):
+        yield node
+        node = node.object
+    yield node
+
+
+def place_indexes(node):
+    return [step.index for step in place_chain(node) if isinstance(step, IndexNode)]
 
 
 def removable_variables(program, info):
@@ -171,9 +158,10 @@ def removable_variables(program, info):
                 if not can_drop(item.value):
                     kept.add(item.ref)
             elif isinstance(item, FieldAssignmentNode):
-                # An assignment through п.х writes п; it does not read it.
-                read_places.update(id(place) for place in walk(item.target))
-                if not can_drop(item.value):
+                # An assignment through п.х or а[і] writes п or а; it does not read it.
+                # The index і is read, and it runs whenever the assignment does.
+                read_places.update(id(step) for step in place_chain(item.target))
+                if not (can_drop(item.value) and all(can_drop(index) for index in place_indexes(item.target))):
                     kept.add(place_root(item.target).ref)
     for code in code_of(program, info):
         for item in walk(code):
@@ -254,6 +242,12 @@ def evaluated_parts(node):
         return [node.object] + node.arguments
     if isinstance(node, FieldAccessNode):
         return [node.object]
+    if isinstance(node, IndexNode):
+        return [node.object, node.index]
+    if isinstance(node, ArrayLiteralNode):
+        return node.elements
+    if isinstance(node, ArrayFillNode):
+        return [node.value]
     return []
 
 
@@ -291,6 +285,8 @@ def statement_expressions(statement):
         return [statement.condition]
     if isinstance(statement, ForNode):
         return [statement.start, statement.end]
+    if isinstance(statement, ForEachNode):
+        return [statement.array]
     return []
 
 
@@ -393,7 +389,7 @@ class Inliner:
         owned = {declaration.info for declaration in parameters}
         for statement in body:
             for item in walk(statement):
-                if isinstance(item, (DeclarationNode, ForNode)):
+                if isinstance(item, (DeclarationNode, ForNode, ForEachNode)):
                     owned.add(item.info)
         for info in owned:
             info.name = self.renamed(info.name, function)
@@ -401,7 +397,7 @@ class Inliner:
             declaration.name = declaration.info.name
         for statement in body:
             for item in walk(statement):
-                if isinstance(item, (DeclarationNode, ForNode)):
+                if isinstance(item, (DeclarationNode, ForNode, ForEachNode)):
                     item.name = item.info.name
                 elif isinstance(item, (IdentifierNode, AssignmentNode)) and item.ref in owned:
                     item.name = item.ref.name

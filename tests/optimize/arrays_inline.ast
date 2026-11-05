@@ -1,0 +1,48 @@
+ProgramNode line=2 column=1
+  DeclarationNode line=5 column=1 name=м type=[i32; 3] mutable=true
+    initializer:
+      ArrayLiteralNode line=5 column=58
+        elements:
+          IntegerNode line=5 column=59 value=1
+          IntegerNode line=5 column=62 value=2
+          IntegerNode line=5 column=65 value=3
+  DeclarationNode line=6 column=58 name=м.обернений.1 type=[i32; 3] mutable=false
+    initializer:
+      IdentifierNode line=6 column=77 name=м
+  DeclarationNode line=3 column=5 name=результат.обернений.1 type=[i32; 3] mutable=false
+    initializer:
+      ArrayLiteralNode line=3 column=18
+        elements:
+          IndexNode line=3 column=21
+            object:
+              IdentifierNode line=3 column=19 name=м.обернений.1
+            index:
+              IntegerNode line=3 column=22 value=2
+          IndexNode line=3 column=28
+            object:
+              IdentifierNode line=3 column=26 name=м.обернений.1
+            index:
+              IntegerNode line=3 column=29 value=1
+          IndexNode line=3 column=35
+            object:
+              IdentifierNode line=3 column=33 name=м.обернений.1
+            index:
+              IntegerNode line=3 column=36 value=0
+  DeclarationNode line=6 column=1 name=о type=[i32; 3] mutable=true
+    initializer:
+      IdentifierNode line=6 column=58 name=результат.обернений.1
+  FieldAssignmentNode line=7 column=1
+    target:
+      IndexNode line=7 column=24
+        object:
+          IdentifierNode line=7 column=22 name=о
+        index:
+          IntegerNode line=7 column=25 value=0
+    value:
+      IntegerNode line=7 column=39 value=100
+  PrintNode line=8 column=1
+    value:
+      IdentifierNode line=8 column=14 name=м
+  PrintNode line=9 column=1
+    value:
+      IdentifierNode line=9 column=14 name=о

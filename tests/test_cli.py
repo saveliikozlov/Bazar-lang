@@ -143,11 +143,11 @@ class CliTest(unittest.TestCase):
         result = self.run_cli("--ast", valid, env=env)
         self.assertEqual(result.returncode, 0)
         self.assertIn("name=їжак".encode(), result.stdout)
-        bad = self.write("bad.bazar", "базарь ;\n".encode())
+        bad = self.write("bad.bazar", "базарь @\n".encode())
         result = self.run_cli("--ast", bad, env=env)
         self.assert_one_line_error(result, 1)
         self.assertEqual(result.stderr.decode("utf-8"),
-                         "compilation error: line 1:14: Шо за символ ';'? Такого в нашому базарі нема.\n")
+                         "compilation error: line 1:14: Шо за символ '@'? Такого в нашому базарі нема.\n")
         result = self.run_cli("--ast", "нема_такого_файлу.bazar", env=env)
         self.assert_one_line_error(result, 2)
         self.assertIn("нема_такого_файлу.bazar".encode(), result.stderr)

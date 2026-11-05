@@ -30,6 +30,9 @@ LPAREN = "lparen"
 RPAREN = "rparen"
 COMMA = "comma"
 DOT = "dot"
+LBRACKET = "lbracket"
+RBRACKET = "rbracket"
+SEMICOLON = "semicolon"
 NEWLINE = "newline"
 EOF = "eof"
 
@@ -44,6 +47,7 @@ KEYWORDS = frozenset((
     "маю", "дєло", "виході", "тримай", "порішали",
     "такі", "діла", "склепай", "ану", "кажи",
     "крутимось", "поки", "докрутились", "харе",
+    "всюди",
 ))
 # Overflow check, first layer: no integer type is wider than крупняк (i64).
 # The largest literal is the magnitude of i64's minimum, 2**63, which is only
@@ -69,6 +73,9 @@ NEWLINE_TEXT = "\n"
 TAB, LF, CR, SPACE = 0x09, 0x0A, 0x0D, 0x20
 COLON, LEFT_PAREN, RIGHT_PAREN, UNDERSCORE = 0x3A, 0x28, 0x29, 0x5F
 COMMA_CHAR, DOT_CHAR, QUOTE, BACKSLASH = 0x2C, 0x2E, 0x22, 0x5C
+# Single-character punctuation tokens, apart from "(" and ")".
+PUNCTUATION = {COMMA_CHAR: (COMMA, ","), DOT_CHAR: (DOT, "."), 0x5B: (LBRACKET, "["), 0x5D: (RBRACKET, "]"),
+               0x3B: (SEMICOLON, ";")}
 # The character after a backslash inside a string literal, and what it means.
 ESCAPES = {0x6E: "\n", QUOTE: '"', BACKSLASH: "\\"}
 BYTE_ORDER_MARK = 0xFEFF
@@ -238,11 +245,9 @@ class Lexer:
                 if cp == RIGHT_PAREN:
                     self.tokens.append(Token(RPAREN, ")", self.line, column))
                     return
-                if cp == COMMA_CHAR:
-                    self.tokens.append(Token(COMMA, ",", self.line, column))
-                    return
-                if cp == DOT_CHAR:
-                    self.tokens.append(Token(DOT, ".", self.line, column))
+                if cp in PUNCTUATION:
+                    kind, text = PUNCTUATION[cp]
+                    self.tokens.append(Token(kind, text, self.line, column))
                     return
                 if cp == QUOTE:
                     self.begin(STRING_BODY, offset)

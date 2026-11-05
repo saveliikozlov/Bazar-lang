@@ -14,7 +14,8 @@ in source order directly beneath their parent.
 
 Stage 2 adds list labels (parameters, fields, methods, arguments): each
 item is printed one level below the label, and an empty list prints as
-label: []. Types print as i32, i64, bool, or the structure name.
+label: []. Types print as i32, i64, bool, or the structure name; an array
+type prints as [ELEMENT; SIZE], with its size as written in the source.
 """
 
 from __future__ import annotations
@@ -129,6 +130,17 @@ class NamedTypeNode(TypeNode):
         return self.name
 
 
+@dataclass
+class ArrayTypeNode(TypeNode):
+    """[ELEMENT; SIZE]: SIZE is a constant expression; size_text is its source spelling."""
+    element: TypeNode
+    size: ExprNode
+    size_text: str
+
+    def __str__(self):
+        return f"[{self.element}; {self.size_text}]"
+
+
 # ------------------------------------------------------------- program
 
 @dataclass
@@ -206,10 +218,10 @@ class AssignmentNode(StmtNode):
 
 @dataclass
 class FieldAssignmentNode(StmtNode):
-    """Assignment to a field: перевзувся NAME.FIELD{.FIELD} тепер EXPR.
+    """Assignment to a field or an element: перевзувся NAME.FIELD[INDEX]... тепер EXPR.
 
-    The target is a FieldAccessNode chain whose innermost object is an
-    IdentifierNode; it never contains a call."""
+    The target is a chain of FieldAccessNode and IndexNode whose innermost
+    object is an IdentifierNode; only its indexes may contain calls."""
     target: ExprNode
     value: ExprNode
 
@@ -253,6 +265,21 @@ class ForNode(StmtNode):
 
     def labelled_children(self):
         return (("start", self.start), ("end", self.end), ("body", self.body))
+
+
+@dataclass
+class ForEachNode(StmtNode):
+    """Array loop syntax: крутимось NAME тіпа TYPE з EXPR ... докрутились."""
+    name: str
+    declared_type: TypeNode
+    array: ExprNode
+    body: BlockNode
+
+    def attributes(self):
+        return (("name", self.name), ("type", self.declared_type))
+
+    def labelled_children(self):
+        return (("array", self.array), ("body", self.body))
 
 
 @dataclass
@@ -460,6 +487,34 @@ class NewObjectNode(ExprNode):
 
     def labelled_children(self):
         return (("arguments", self.arguments),)
+
+
+@dataclass
+class IndexNode(ExprNode):
+    """OBJECT[INDEX]: one element of an array; positioned at "["."""
+    object: ExprNode
+    index: ExprNode
+
+    def labelled_children(self):
+        return (("object", self.object), ("index", self.index))
+
+
+@dataclass
+class ArrayLiteralNode(ExprNode):
+    """[EXPR, EXPR, ...]: an array of the listed elements, at least one."""
+    elements: list[ExprNode]
+
+    def labelled_children(self):
+        return (("elements", self.elements),)
+
+
+@dataclass
+class ArrayFillNode(ExprNode):
+    """[всюди EXPR]: every element is EXPR; the length comes from the expected type."""
+    value: ExprNode
+
+    def labelled_children(self):
+        return (("value", self.value),)
 
 
 @dataclass

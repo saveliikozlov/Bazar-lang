@@ -7,7 +7,8 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from lexer import (  # noqa: E402
-    COMMA, DOT, EOF, IDENT, INTEGER, KEYWORD, KEYWORDS, LPAREN, NEWLINE, NEWLINE_TEXT, RPAREN,
+    COMMA, DOT, EOF, IDENT, INTEGER, KEYWORD, KEYWORDS, LBRACKET, LPAREN, NEWLINE, NEWLINE_TEXT, RBRACKET,
+    RPAREN, SEMICOLON,
     STRING, LexError, Token, lex,
 )
 
@@ -15,7 +16,7 @@ NEW_KEYWORDS = ("желєзобетонно зуб даю мутна тєма т
                 "всьо розходимось якшо реально а нє отакої гон або і ше рівно не більше "
                 "менше плюс мінус на ділити "
                 "маю дєло виході тримай порішали такі діла склепай ану кажи "
-                "крутимось поки докрутились харе").split()
+                "крутимось поки докрутились харе всюди").split()
 
 # Former Russian vocabulary absent from the new keywords is deliberately
 # retained here to verify that these words are now ordinary identifiers.
@@ -224,11 +225,23 @@ class TokenTest(unittest.TestCase):
         self.assertEqual(lex(b"x12")[0], Token(IDENT, "x12", 1, 1))
 
     def test_rejects_other_characters(self):
-        for bad in "+-*/=!<>;:\"'{}[]\x00\x0b\x0c\x7f":
+        for bad in "+-*/=!<>:@?\"'{}\x00\x0b\x0c\x7f":
             with self.subTest(bad=bad):
                 with self.assertRaises(LexError):
                     lex(bad.encode())
 
+
+
+class ArrayTokenTest(unittest.TestCase):
+    def test_brackets_and_semicolon(self):
+        self.assertEqual(kinds("[дрібняк; 5]".encode()), [LBRACKET, KEYWORD, SEMICOLON, INTEGER, RBRACKET, EOF])
+        self.assertEqual(kinds("м[0][к]".encode()), [IDENT, LBRACKET, INTEGER, RBRACKET, LBRACKET, IDENT, RBRACKET, EOF])
+        tokens = lex("[всюди 0]".encode())
+        self.assertEqual(tokens[1], Token(KEYWORD, "всюди", 1, 2))
+        self.assertEqual(tokens[3], Token(RBRACKET, "]", 1, 14))      # всюди is 10 bytes
+
+    def test_range_and_loop_words_stay_names(self):
+        self.assertEqual(kinds("з розмір".encode()), [IDENT, IDENT, EOF])
 
 
 class StageTwoTokenTest(unittest.TestCase):

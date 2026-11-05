@@ -6,7 +6,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from bazar_types import BOOL, I32, I64  # noqa: E402
+from bazar_types import BOOL, I32, I64, ArrayType  # noqa: E402
 from parser import CompilationError, parse_program  # noqa: E402
 from semantic import FieldInfo, analyze  # noqa: E402
 
@@ -97,6 +97,41 @@ class AnnotationTest(unittest.TestCase):
             check("маю дєло ф(н тіпа дрібняк) на виході дрібняк\n    тримай н\nпорішали\n"
                   "базарь ф(1, 2)")
         self.assertEqual((context.exception.line, context.exception.column), (4, 14))
+
+
+
+class ArrayAnnotationTest(unittest.TestCase):
+    def test_array_types_use_constants_and_nest(self):
+        program, info = check("желєзобетонно Н тіпа дрібняк це 2\n"
+                              "маю дєло ф(м тіпа [[базар; Н]; Н плюс 1]) на виході [крупняк; 3]\n"
+                              "    тримай [всюди 0]\nпорішали")
+        function = info.functions["ф"]
+        self.assertEqual(function.parameters[0].type, ArrayType(ArrayType(BOOL, 2), 3))
+        self.assertEqual(function.result, ArrayType(I64, 3))
+        self.assertEqual(str(function.result), "[i64; 3]")
+        self.assertEqual(function.result.word, "[крупняк; 3]")
+
+    def test_literals_take_the_element_type_from_context(self):
+        program, _ = check("зуб даю м тіпа [дрібняк; 2] це [1, мінус 2]\nбазарь [5000000000, 1]")
+        declaration, printed = program.statements
+        self.assertEqual([item.type for item in declaration.initializer.elements], [I32, I32])
+        self.assertEqual(printed.value.type, ArrayType(I64, 2))
+
+    def test_index_and_length_annotations(self):
+        program, _ = check("зуб даю м тіпа [дрібняк; 3] це [1, 2, 3]\nзуб даю к тіпа дрібняк це 1\n"
+                           "базарь м[2]\nбазарь м[к]\nзуб даю д тіпа крупняк це м.розмір\nбазарь м.розмір")
+        known, unknown, wide, plain = program.statements[2:]
+        self.assertEqual((known.value.index_value, known.value.type), (2, I32))
+        self.assertIsNone(unknown.value.index_value)
+        self.assertEqual((wide.initializer.length, wide.initializer.type), (3, I64))   # typed by context
+        self.assertEqual(plain.value.type, I32)                                      # дрібняк without one
+        self.assertIsNone(plain.value.field_info)
+
+    def test_for_each_counter_is_an_immutable_element(self):
+        program, _ = check("зуб даю м тіпа [дрібняк; 2] це [1, 2]\nкрутимось е тіпа дрібняк з м\n"
+                           "    базарь е\nдокрутились")
+        loop = program.statements[1]
+        self.assertEqual((loop.info.type, loop.info.kind), (I32, "counter"))
 
 
 if __name__ == "__main__":

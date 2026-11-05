@@ -9,14 +9,14 @@ the final byte.
 """
 
 from ast_nodes import (
-    AssignmentNode, BinaryNode, BlockNode, BooleanNode, CallNode, CallStatementNode,
-    BreakNode, ConstantDeclarationNode, DeclarationNode, ExitNode, FieldAccessNode,
-    FieldAssignmentNode, FieldNode, ForNode, FunctionNode, IdentifierNode, IfNode, IntegerNode,
-    MemberCallNode, NamedTypeNode, NewObjectNode, ParameterNode, PrintNode, ProgramNode, ReadNode,
-    ReturnNode, StringNode, StructureNode, UnaryNode, WhileNode,
+    ArrayFillNode, ArrayLiteralNode, ArrayTypeNode, AssignmentNode, BinaryNode, BlockNode, BooleanNode,
+    CallNode, CallStatementNode, BreakNode, ConstantDeclarationNode, DeclarationNode, ExitNode,
+    FieldAccessNode, FieldAssignmentNode, FieldNode, ForEachNode, ForNode, FunctionNode, IdentifierNode,
+    IfNode, IndexNode, IntegerNode, MemberCallNode, NamedTypeNode, NewObjectNode, ParameterNode, PrintNode,
+    ProgramNode, ReadNode, ReturnNode, StringNode, StructureNode, UnaryNode, WhileNode,
 )
-from lexer import (COMMA, DOT, EOF, I64_MIN_MAGNITUDE, IDENT, INTEGER, KEYWORD, KEYWORDS, LPAREN,
-                   NEWLINE, RPAREN, STRING, lex)
+from lexer import (COMMA, DOT, EOF, I64_MIN_MAGNITUDE, IDENT, INTEGER, KEYWORD, KEYWORDS, LBRACKET, LPAREN,
+                   NEWLINE, RBRACKET, RPAREN, SEMICOLON, STRING, lex)
 
 TYPE_NAMES = {"дрібняк": "i32", "крупняк": "i64", "базар": "bool"}
 
@@ -201,7 +201,7 @@ class Parser:
                 raise self.error("«Отакої» без «якшо реально»? Закривати нічого: спочатку відкрий базар.")
             if token.text == "порішали":
                 raise self.error("«Порішали» без «маю дєло» чи «такі діла»? Закривати нічого.")
-        if token.kind == IDENT and self.tokens[self.index + 1].kind in (LPAREN, DOT):
+        if token.kind == IDENT and self.tokens[self.index + 1].kind in (LPAREN, DOT, LBRACKET):
             return self.parse_call_statement()
         raise self.unexpected("інструкцію: оголошення, «перевзувся», «якшо реально», "
                               "«базарь» або «всьо розходимось»")
@@ -237,17 +237,33 @@ class Parser:
         return name, declared_type, self.parse_expression()
 
     def parse_type(self):
-        # type = "дрібняк" | "крупняк" | "базар" | IDENT
+        # type = "дрібняк" | "крупняк" | "базар" | IDENT | array_type
         # The node is positioned at the type: the semantic pass reports an
         # unknown structure name there.
         if self.at(IDENT):
             token = self.eat()              # a structure name, checked by the semantic pass
             return NamedTypeNode(token.line, token.column, token.text)
+        if self.at(LBRACKET):
+            return self.parse_array_type()
         if not self.at_keyword(*TYPE_NAMES):
-            raise self.error(f"Який тип, шеф? Чекаю «дрібняк», «крупняк», «базар» або назву структури, "
-                             f"а тут {describe(self.peek())}.")
+            raise self.error(f"Який тип, шеф? Чекаю «дрібняк», «крупняк», «базар», назву структури "
+                             f"або масив «[тип; розмір]», а тут {describe(self.peek())}.")
         token = self.eat()
         return NamedTypeNode(token.line, token.column, TYPE_NAMES[token.text])
+
+    def parse_array_type(self):
+        # array_type = "[", type, ";", expression, "]"
+        opener = self.eat()
+        self.enter(opener)
+        element = self.parse_type()
+        self.expect(SEMICOLON, "Скільки штук? Після типу елементів чекаю «;» і розмір масиву, а тут {found}.")
+        start = self.index
+        size = self.parse_expression()
+        size_text = spell(self.tokens[start:self.index])
+        self.expect(RBRACKET, f"Дужку «[» з рядка {opener.line}:{opener.column} не закрито: "
+                              f"чекаю «]», а тут {{found}}.")
+        self.leave()
+        return ArrayTypeNode(opener.line, opener.column, element, size, size_text)
 
     def parse_assignment(self):
         # "перевзувся", place, "тепер", expression
@@ -260,16 +276,19 @@ class Parser:
         return FieldAssignmentNode(first.line, first.column, target, value)
 
     def parse_place(self):
-        """place = IDENT, { ".", IDENT }
+        """place = IDENT, { ".", IDENT | "[", expression, "]" }
 
-        Returns the last name token and a FieldAccessNode chain, or None
-        for a plain variable."""
+        Returns the last name token and a chain of FieldAccessNode and
+        IndexNode, or None for a plain variable."""
         name = self.expect_name("«перевзувся»")
         target = None
-        while self.at(DOT):
-            self.eat()
+        while self.at(DOT) or self.at(LBRACKET):
             if target is None:
                 target = IdentifierNode(name.line, name.column, name.text)
+            if self.at(LBRACKET):
+                target = self.parse_index(target)
+                continue
+            self.eat()
             name = self.expect_field_name()
             target = FieldAccessNode(name.line, name.column, target, name.text)
         if self.at(LPAREN):
@@ -353,11 +372,16 @@ class Parser:
     def parse_for_loop(self, first):
         # "крутимось", IDENT, "тіпа", type, "від", expression, "по", expression,
         # NEWLINE, block, "докрутились"
+        # or the array loop: "крутимось", IDENT, "тіпа", type, "з", expression,
+        # NEWLINE, block, "докрутились"
         name = self.expect_name("«крутимось»")
         self.expect_keyword("тіпа", f"Де «тіпа», шеф? Після лічильника «{name.text}» треба вказати тип, "
                                     f"а тут {{found}}.")
         declared_type = self.parse_type()
-        self.expect_range_word("від", "Звідки крутимось? Після типу чекаю «від» і початок, а тут {found}.")
+        if self.peek().kind == IDENT and self.peek().text == "з":
+            return self.parse_for_each_loop(first, name, declared_type)
+        self.expect_range_word("від", "Звідки крутимось? Після типу чекаю «від» і початок "
+                                      "або «з» і масив, а тут {found}.")
         self.enter(first)
         start = self.parse_expression()
         self.expect_range_word("по", "Докуди крутимось? Після початку чекаю «по» і кінець, а тут {found}.")
@@ -365,6 +389,14 @@ class Parser:
         self.expect(NEWLINE, "Заголовок циклу скінчився, а далі {found}? Тіло циклу пиши з нового рядка.")
         body = self.parse_loop_body(first)
         return ForNode(first.line, first.column, name.text, declared_type, start, end, body)
+
+    def parse_for_each_loop(self, first, name, declared_type):
+        self.eat()                           # з
+        self.enter(first)
+        array = self.parse_expression()
+        self.expect(NEWLINE, "Заголовок циклу скінчився, а далі {found}? Тіло циклу пиши з нового рядка.")
+        body = self.parse_loop_body(first)
+        return ForEachNode(first.line, first.column, name.text, declared_type, array, body)
 
     def parse_loop_body(self, opener):
         """The block of a loop and its closer; ends the nesting level the header entered."""
@@ -672,6 +704,8 @@ class Parser:
             return self.parse_read_expression()
         if self.at_keyword("склепай"):
             return self.parse_object_creation()
+        if token.kind == LBRACKET:
+            return self.parse_array_literal()
         if token.kind == STRING:
             raise self.error("Рядок у лапках можна тільки базарити: «базарь \"...\"». "
                              "У виразах рядків нема.")
@@ -702,19 +736,54 @@ class Parser:
         return NewObjectNode(first.line, first.column, name.text, self.parse_arguments())
 
     def parse_chain(self):
-        # IDENT, [ arguments ], { ".", IDENT, [ arguments ] }
+        # IDENT, [ arguments ], { ".", IDENT, [ arguments ] | "[", expression, "]" }
         name = self.eat()
         if self.at(LPAREN):
             node = CallNode(name.line, name.column, name.text, self.parse_arguments())
         else:
             node = IdentifierNode(name.line, name.column, name.text)
-        while self.at(DOT):
+        while self.at(DOT) or self.at(LBRACKET):
+            if self.at(LBRACKET):
+                node = self.parse_index(node)
+                continue
             self.eat()
             member = self.expect_field_name()
             if self.at(LPAREN):
                 node = MemberCallNode(member.line, member.column, node, member.text, self.parse_arguments())
             else:
                 node = FieldAccessNode(member.line, member.column, node, member.text)
+        return node
+
+    def parse_index(self, node):
+        # "[", expression, "]" after a chain: one element of an array
+        opener = self.eat()
+        self.enter(opener)
+        index = self.parse_expression()
+        self.expect(RBRACKET, f"Дужку «[» з рядка {opener.line}:{opener.column} не закрито: "
+                              f"чекаю «]», а тут {{found}}.")
+        self.leave()
+        return IndexNode(opener.line, opener.column, node, index)
+
+    def parse_array_literal(self):
+        # "[", "всюди", expression, "]" | "[", expression, { ",", expression }, "]"
+        opener = self.eat()
+        self.enter(opener)
+        if self.at_keyword("всюди"):
+            self.eat()
+            node = ArrayFillNode(opener.line, opener.column, self.parse_expression())
+            expected = "«]»"
+        else:
+            if self.at(RBRACKET):
+                raise self.error("Порожній масив не канає: дай хоч один елемент або пиши «[всюди ...]».")
+            elements = [self.parse_expression()]
+            while self.at(COMMA):
+                self.eat()
+                elements.append(self.parse_expression())
+            node = ArrayLiteralNode(opener.line, opener.column, elements)
+            expected = "«,» або «]»"
+        self.expect(RBRACKET, f"Дужку «[» з рядка {opener.line}:{opener.column} не закрито: "
+                              f"чекаю {expected}, а тут {{found}}.")
+        self.leave()
         return node
 
     def parse_arguments(self):
@@ -736,6 +805,16 @@ class Parser:
         # "реально" | "гон"
         token = self.eat()
         return BooleanNode(token.line, token.column, token.text == "реально")
+
+
+def spell(tokens):
+    """Source-like text of a token run: words apart, no space inside brackets or before a comma."""
+    text = ""
+    for token in tokens:
+        if text and not text.endswith(("(", "[")) and token.kind not in (RPAREN, RBRACKET, COMMA):
+            text += " "
+        text += token.text
+    return text
 
 
 def parse_program(data: bytes) -> ProgramNode:

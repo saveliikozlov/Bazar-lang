@@ -14,6 +14,8 @@ generation:
 * CallNode.target / MemberCallNode.target: a FunctionInfo, and
   CallNode.on_self: a bare call of a member function on the own object;
 * FieldAccessNode.field_info: the FieldInfo, whose index is the gep index;
+  for розмір of an array it is None, and .length holds the length;
+* IndexNode.index_value: the index when it is known now (and checked), or None;
 * ConstantDeclarationNode.info.value: the value computed at compile time.
 
 The first error raises CompilationError with the position of the node that
@@ -26,17 +28,20 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from ast_nodes import (
-    AssignmentNode, BinaryNode, BooleanNode, BreakNode, CallNode, CallStatementNode,
+    ArrayFillNode, ArrayLiteralNode, ArrayTypeNode, ForEachNode, IndexNode, AssignmentNode, BinaryNode, BooleanNode, BreakNode, CallNode, CallStatementNode,
     ConstantDeclarationNode, DeclarationNode, ExitNode, FieldAccessNode, FieldAssignmentNode, ForNode,
     FunctionNode, IdentifierNode, IfNode, IntegerNode, MemberCallNode, NewObjectNode, PrintNode,
     ReadNode, ReturnNode, StringNode, StructureNode, UnaryNode, WhileNode,
 )
 from bazar_types import (
-    BOOL, BUILTIN_TYPES, I64, STRING, StructType, Type, contained_structs, is_comparable, is_integer, is_scalar,
+    BOOL, BUILTIN_TYPES, I32, I64, STRING, ArrayType, StructType, Type, contained_structs, is_comparable,
+    is_integer, is_scalar,
 )
 from parser import CompilationError
 
 ARITHMETIC = ("add", "sub", "mul", "div")
+LENGTH = "розмір"                    # the only field of an array
+MAX_ARRAY_LENGTH = 2**31 - 1
 ORDERING = ("gt", "lt")
 EQUALITY = ("eq", "ne")
 LOGIC = ("and", "or")
@@ -122,8 +127,9 @@ class Context:
     """Where a body is checked: the main program, a function, or a member function."""
     function: FunctionInfo | None
     scope: Scope
-    const_only: bool = False         # inside a желєзобетонно initializer
+    const_only: bool = False         # inside a желєзобетонно initializer or an array size
     in_loop: bool = False            # харе has a loop to leave
+    const_of: str = "«желєзобетонно»"   # what const_only checks, for its messages
 
     @property
     def structure(self):
@@ -178,11 +184,56 @@ def is_flexible(node):
         return is_flexible(node.operand)
     if isinstance(node, BinaryNode) and node.operator in ARITHMETIC:
         return is_flexible(node.left) and is_flexible(node.right)
-    return False
+    if isinstance(node, ArrayLiteralNode):
+        return all(is_flexible(item) for item in node.elements)
+    return isinstance(node, ArrayFillNode)
+
+
+def is_name_chain(node):
+    """A name or its fields: reading it runs nothing and cannot fail."""
+    while isinstance(node, FieldAccessNode):
+        node = node.object
+    return isinstance(node, IdentifierNode)
+
+
+def constant_value(node):
+    """The value of a checked integer expression known now, or None if it is unknown or overflows.
+
+    Known are literals, integer constants, розмір of a name, and arithmetic on them."""
+    if isinstance(node, IntegerNode):
+        return int(node.value)
+    if isinstance(node, IdentifierNode):
+        known = isinstance(node.ref, VarInfo) and node.ref.kind == "const"
+        return node.ref.value if known and is_integer(node.ref.type) else None
+    if isinstance(node, FieldAccessNode):
+        known = getattr(node, "field_info", True) is None and is_name_chain(node.object)
+        return node.length if known else None
+    if isinstance(node, UnaryNode):
+        operand = constant_value(node.operand)
+        value = None if operand is None else -operand
+    elif isinstance(node, BinaryNode) and node.operator in ARITHMETIC:
+        left, right = constant_value(node.left), constant_value(node.right)
+        if left is None or right is None or (node.operator == "div" and right == 0):
+            return None
+        if node.operator == "add":
+            value = left + right
+        elif node.operator == "sub":
+            value = left - right
+        elif node.operator == "mul":
+            value = left * right
+        else:
+            quotient = abs(left) // abs(right)
+            value = quotient if (left < 0) == (right < 0) else -quotient
+    else:
+        return None
+    if value is None:
+        return None
+    low, high = node.type.range
+    return value if low <= value <= high else None
 
 
 def chain_root(node):
-    while isinstance(node, (FieldAccessNode, MemberCallNode)):
+    while isinstance(node, (FieldAccessNode, MemberCallNode, IndexNode)):
         node = node.object
     return node
 
@@ -203,16 +254,17 @@ class Analyzer:
         # Rule 1: every declaration is collected before any body is checked.
         for node in structures:
             self.declare_structure(node)
+        # Constants are computed in source order; function bodies see all of them.
+        # They come before the signatures and fields, whose array sizes use them.
+        constant_scope = Scope()
+        for node in statements:
+            if isinstance(node, ConstantDeclarationNode):
+                self.declare_constant(node, constant_scope)
         for node in functions:
             self.declare_top_function(node)
         for node in structures:
             self.declare_members(self.structures[node.name])
         self.check_structure_cycles(structures)
-        # Constants are computed in source order; function bodies see all of them.
-        constant_scope = Scope()
-        for node in statements:
-            if isinstance(node, ConstantDeclarationNode):
-                self.declare_constant(node, constant_scope)
         for node in structures:
             self.check_defaults(self.structures[node.name], constant_scope)
         self.fill_auto_defaults()
@@ -267,14 +319,49 @@ class Analyzer:
         result = self.resolve_type(node.result_type)
         return FunctionInfo(node.name, parameters, result, node, owner)
 
-    def resolve_type(self, node):
-        """The Type that a TypeNode names; an unknown structure name is an error at it."""
+    def resolve_type(self, node, context=None):
+        """The Type that a TypeNode names; an unknown structure name is an error at it.
+
+        context is where the type is written, for the constants an array size
+        may use; None is a signature or a field, which see every constant."""
+        if isinstance(node, ArrayTypeNode):
+            return ArrayType(self.resolve_type(node.element, context), self.array_length(node.size, context))
         if node.name in BUILTIN_TYPES:
             return BUILTIN_TYPES[node.name]
         if node.name in self.structures:
             return StructType(node.name)
         raise error(node, f"Шо за тип «{node.name}»? Такої структури нема, а з вбудованих є "
                           f"«дрібняк», «крупняк» і «базар».")
+
+    def array_length(self, node, context):
+        """An array size: a constant integer expression from 1 to MAX_ARRAY_LENGTH."""
+        scope = Scope()
+        scope.names = self.visible_constants(context)
+        self.require_integer(node, None, Context(None, scope, const_only=True, const_of="розмірі масиву"))
+        length = self.evaluate(node)
+        if not 1 <= length <= MAX_ARRAY_LENGTH:
+            raise error(node, f"Розмір масиву має бути від 1 до {MAX_ARRAY_LENGTH}, а тут {length}.")
+        return length
+
+    def visible_constants(self, context):
+        """The constants a name in context refers to: rule 6, 7, 8 without the non-constants."""
+        if context is None:
+            names = dict(self.constants)
+        else:
+            names = {}
+            if context.function is not None:
+                names.update(self.constants)
+                if context.structure is not None:
+                    names.update(context.structure.fields)
+            scopes = []
+            scope = context.scope
+            while scope is not None:
+                scopes.append(scope)
+                scope = scope.parent
+            for scope in reversed(scopes):
+                names.update(scope.names)
+        return {name: info for name, info in names.items()
+                if isinstance(info, VarInfo) and info.kind == "const"}
 
     def check_structure_cycles(self, structures):
         # Rule 16: an object cannot contain itself, directly or through fields.
@@ -308,6 +395,9 @@ class Analyzer:
             node = info.node
             if node.default is None:
                 continue
+            if isinstance(info.type, ArrayType):
+                raise error(node.default, f"Поле «{info.name}» — масив, йому «це» не пишуть: "
+                                          f"значення масиву давай у «склепай».")
             if not is_scalar(info.type):
                 raise error(node.default, f"Поле «{info.name}» — об'єкт «{info.type}», йому «це» не пишуть: "
                                           f"воно склепається саме, якщо всі поля «{info.type}» мають «це».")
@@ -463,6 +553,8 @@ class Analyzer:
             self.check_block(node.body, context, in_loop=True)
         elif isinstance(node, ForNode):
             self.check_for(node, context)
+        elif isinstance(node, ForEachNode):
+            self.check_for_each(node, context)
         elif isinstance(node, BreakNode):
             if not context.in_loop:
                 raise error(node, "«Харе» — тільки всередині «крутимось»: виходити нема з чого.")
@@ -472,7 +564,7 @@ class Analyzer:
     def check_for(self, node, context):
         # Rules 27, 28: the bounds are checked outside the counter's scope; the
         # counter and the outer block of the body are one scope.
-        counter_type = self.resolve_type(node.declared_type)
+        counter_type = self.resolve_type(node.declared_type, context)
         if not is_integer(counter_type):
             raise error(node.declared_type, f"Лічильник «{node.name}» має бути цілим числом, "
                                       f"а не «{word(counter_type)}».")
@@ -484,8 +576,28 @@ class Analyzer:
         scope.names[node.name] = info
         self.check_statements(node.body.statements, Context(context.function, scope, in_loop=True))
 
+    def check_for_each(self, node, context):
+        # Rule 29: the array is checked outside the counter's scope, and the counter
+        # holds each element in turn; it has the element type and cannot be assigned.
+        element_type = self.resolve_type(node.declared_type, context)
+        if isinstance(node.array, ArrayLiteralNode):
+            # The counter's type is the element type of a listed array: [1, 2] of дрібняк.
+            array_type = self.expression(node.array, ArrayType(element_type, len(node.array.elements)), context)
+        else:
+            array_type = self.expression(node.array, None, context)
+        if not isinstance(array_type, ArrayType):
+            raise error(node.array, f"«Крутимось … з» ходить тільки по масиву, а тут «{word(array_type)}».")
+        if array_type.element != element_type:
+            raise error(node.declared_type, f"У масиві лежать «{word(array_type.element)}», а лічильник "
+                                            f"«{node.name}» — «{word(element_type)}».")
+        info = VarInfo(node.name, element_type, "counter")
+        node.info = info
+        scope = Scope(context.scope)
+        scope.names[node.name] = info
+        self.check_statements(node.body.statements, Context(context.function, scope, in_loop=True))
+
     def check_declaration(self, node, context):
-        declared = self.resolve_type(node.declared_type)
+        declared = self.resolve_type(node.declared_type, context)
         # The initializer cannot see the name it declares: check it first.
         self.require(node.initializer, declared, context)
         if node.name in context.scope.names:
@@ -514,6 +626,8 @@ class Analyzer:
 
     def check_field_assignment(self, node, context):
         target_type = self.expression(node.target, None, context)
+        if isinstance(node.target, FieldAccessNode) and node.target.field_info is None:
+            raise error(node.target, "«Розмір» масиву не перевзувають: він желєзобетонний.")
         problem = self.chain_problem(node.target, context)
         if problem:
             raise error(problem, f"Через «{problem.name}» не перевзуєшся: увесь ланцюжок має бути «мутна тєма».")
@@ -530,6 +644,9 @@ class Analyzer:
             if problem:
                 return problem
             return None if node.field_info.mutable else ChainStep(node.line, node.column, node.field)
+        if isinstance(node, IndexNode):
+            # An element is as mutable as its array.
+            return self.chain_problem(node.object, context)
         if isinstance(node, IdentifierNode):
             info = node.ref
             mutable = info.mutable if isinstance(info, FieldInfo) else info.kind == "mutable"
@@ -558,7 +675,7 @@ class Analyzer:
     def expression_type(self, node, expected, context):
         if context.const_only and not isinstance(
                 node, (IntegerNode, BooleanNode, IdentifierNode, UnaryNode, BinaryNode)):
-            raise error(node, "У «желєзобетонно» тільки числа, «реально»/«гон», операції й інші константи.")
+            raise error(node, f"У {context.const_of} тільки числа, «реально»/«гон», операції й інші константи.")
         value = literal_value(node)
         if value is not None:
             result = expected if is_integer(expected) else I64
@@ -581,7 +698,7 @@ class Analyzer:
             if context.const_only:
                 node.ref = context.scope.lookup(node.name)
                 if node.ref is None:
-                    raise error(node, f"«{node.name}» — не константа: у «желєзобетонно» можна тільки "
+                    raise error(node, f"«{node.name}» — не константа: у {context.const_of} можна тільки "
                                       f"константи, оголошені вище.")
                 return node.ref.type
             node.ref = self.lookup_value(node.name, node, context)
@@ -595,7 +712,15 @@ class Analyzer:
         if isinstance(node, MemberCallNode):
             return self.member_call_type(node, context)
         if isinstance(node, FieldAccessNode):
-            structure = self.object_structure(node.object, context)
+            object_type = self.expression(node.object, None, context)
+            if isinstance(object_type, ArrayType):
+                if node.field != LENGTH:
+                    raise error(node, f"У масиву нема поля «{node.field}»: є тільки «{LENGTH}».")
+                # Rule 30: a constant, typed like an integer literal; дрібняк without context.
+                node.field_info = None
+                node.length = object_type.length
+                return expected if is_integer(expected) else I32
+            structure = self.structure_of(object_type, node.object)
             if node.field not in structure.fields:
                 raise error(node, f"В «{structure.name}» нема поля «{node.field}».")
             node.field_info = structure.fields[node.field]
@@ -616,7 +741,45 @@ class Analyzer:
                                       f"а свого «це» в нього нема.")
             self.check_arguments(node, node.arguments, [f.type for f in given], what, context)
             return StructType(structure.name)
+        if isinstance(node, IndexNode):
+            return self.index_type(node, context)
+        if isinstance(node, ArrayLiteralNode):
+            return self.array_literal_type(node, expected, context)
+        if isinstance(node, ArrayFillNode):
+            if not isinstance(expected, ArrayType):
+                raise error(node, "«[всюди …]» не знає, скільки штук: тут не видно, який масив треба. "
+                                  "Вкажи тип через «тіпа» або перелічи елементи.")
+            self.require(node.value, expected.element, context)
+            return expected
         raise error(node, "Такий вираз тут не канає.")
+
+    def index_type(self, node, context):
+        # Rule 31: an integer index; one known now must be inside the array.
+        array_type = self.expression(node.object, None, context)
+        if not isinstance(array_type, ArrayType):
+            raise error(node, f"«{word(array_type)}» — не масив, номером у нього не ткнеш.")
+        self.require_integer(node.index, None, context)
+        value = constant_value(node.index)
+        if value is not None and not 0 <= value < array_type.length:
+            raise error(node.index, f"Номер {value} за межами масиву: у «{word(array_type)}» можна від 0 "
+                                    f"до {array_type.length - 1}.")
+        node.index_value = value
+        return array_type.element
+
+    def array_literal_type(self, node, expected, context):
+        """[a, b, c]: all elements of one type, which an expected array gives to literals."""
+        if isinstance(expected, ArrayType):
+            element = expected.element
+            for item in node.elements:
+                self.require(item, element, context)
+        else:
+            # Like an operator: the first element with its own type sets it.
+            first = next((item for item in node.elements if not is_flexible(item)), node.elements[0])
+            element = self.expression(first, None, context)
+            for item in node.elements:
+                if item is not first:
+                    self.require(item, element, context)
+        return ArrayType(element, len(node.elements))
 
     def mark_literal(self, node, type_name):
         while isinstance(node, UnaryNode):
@@ -641,6 +804,9 @@ class Analyzer:
         elif not is_flexible(node.right):
             operand_type = self.expression(node.right, None, context)
             self.require_operand(node.left, operand_type, node, context)
+        elif isinstance(node.left, (ArrayLiteralNode, ArrayFillNode)):
+            operand_type = self.expression(node.left, None, context)
+            self.require_operand(node.right, operand_type, node, context)
         else:
             operand_type = I64
             self.require(node.left, I64, context)
@@ -648,7 +814,7 @@ class Analyzer:
         if operator in EQUALITY:
             if not is_comparable(operand_type):
                 raise error(node, f"Об'єкти «{word(operand_type)}» не порівнюють: "
-                                  f"«рівно» тільки для чисел і базару.")
+                                  f"«рівно» тільки для чисел, базару й масивів з них.")
             return BOOL
         if not is_integer(operand_type):
             raise error(node, f"Тут треба цілі числа, а не «{word(operand_type)}».")
@@ -694,7 +860,9 @@ class Analyzer:
         return target.result
 
     def object_structure(self, node, context):
-        object_type = self.expression(node, None, context)
+        return self.structure_of(self.expression(node, None, context), node)
+
+    def structure_of(self, object_type, node):
         if not isinstance(object_type, StructType):
             raise error(node, f"«{word(object_type)}» — не об'єкт, у нього нема полів і функцій.")
         return self.structures[object_type.name]
