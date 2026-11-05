@@ -12,8 +12,8 @@ from ast_nodes import (
     AssignmentNode, BinaryNode, BlockNode, BooleanNode, CallNode, CallStatementNode,
     BreakNode, ConstantDeclarationNode, DeclarationNode, ExitNode, FieldAccessNode,
     FieldAssignmentNode, FieldNode, ForNode, FunctionNode, IdentifierNode, IfNode, IntegerNode,
-    MemberCallNode, NewObjectNode, ParameterNode, PrintNode, ProgramNode, ReadNode, ReturnNode,
-    StringNode, StructureNode, UnaryNode, WhileNode,
+    MemberCallNode, NamedTypeNode, NewObjectNode, ParameterNode, PrintNode, ProgramNode, ReadNode,
+    ReturnNode, StringNode, StructureNode, UnaryNode, WhileNode,
 )
 from lexer import (COMMA, DOT, EOF, I64_MIN_MAGNITUDE, IDENT, INTEGER, KEYWORD, KEYWORDS, LPAREN,
                    NEWLINE, RPAREN, STRING, lex)
@@ -209,10 +209,8 @@ class Parser:
     def parse_constant_declaration(self):
         # "желєзобетонно", IDENT, "тіпа", type, "це", expression
         first = self.eat()
-        name, declared_type, type_at, initializer = self.parse_declaration_parts("«желєзобетонно»")
-        node = ConstantDeclarationNode(first.line, first.column, name.text, declared_type, initializer)
-        node.type_at = type_at
-        return node
+        name, declared_type, initializer = self.parse_declaration_parts("«желєзобетонно»")
+        return ConstantDeclarationNode(first.line, first.column, name.text, declared_type, initializer)
 
     def parse_immutable_declaration(self):
         # "зуб", "даю", IDENT, "тіпа", type, "це", expression
@@ -227,30 +225,29 @@ class Parser:
         return self.parse_declaration_rest(first, "«мутна тєма»", mutable=True)
 
     def parse_declaration_rest(self, first, phrase, mutable):
-        name, declared_type, type_at, initializer = self.parse_declaration_parts(phrase)
-        node = DeclarationNode(first.line, first.column, name.text, declared_type, mutable, initializer)
-        node.type_at = type_at
-        return node
+        name, declared_type, initializer = self.parse_declaration_parts(phrase)
+        return DeclarationNode(first.line, first.column, name.text, declared_type, mutable, initializer)
 
     def parse_declaration_parts(self, phrase):
         """Shared declaration suffix: IDENT, тіпа, type, це, expression."""
         name = self.expect_name(phrase)
         self.expect_keyword("тіпа", f"Де «тіпа», шеф? Після «{name.text}» треба вказати тип, а тут {{found}}.")
-        type_at = self.peek()
         declared_type = self.parse_type()
         self.expect_keyword("це", "Де «це»? Після типу чекаю «це» і початкове значення, а тут {found}.")
-        return name, declared_type, type_at, self.parse_expression()
+        return name, declared_type, self.parse_expression()
 
     def parse_type(self):
         # type = "дрібняк" | "крупняк" | "базар" | IDENT
-        # Callers keep the type token as node.type_at: the semantic pass
-        # reports an unknown structure name at that position.
+        # The node is positioned at the type: the semantic pass reports an
+        # unknown structure name there.
         if self.at(IDENT):
-            return self.eat().text          # a structure name, checked by the semantic pass
+            token = self.eat()              # a structure name, checked by the semantic pass
+            return NamedTypeNode(token.line, token.column, token.text)
         if not self.at_keyword(*TYPE_NAMES):
             raise self.error(f"Який тип, шеф? Чекаю «дрібняк», «крупняк», «базар» або назву структури, "
                              f"а тут {describe(self.peek())}.")
-        return TYPE_NAMES[self.eat().text]
+        token = self.eat()
+        return NamedTypeNode(token.line, token.column, TYPE_NAMES[token.text])
 
     def parse_assignment(self):
         # "перевзувся", place, "тепер", expression
@@ -359,7 +356,6 @@ class Parser:
         name = self.expect_name("«крутимось»")
         self.expect_keyword("тіпа", f"Де «тіпа», шеф? Після лічильника «{name.text}» треба вказати тип, "
                                     f"а тут {{found}}.")
-        type_at = self.peek()
         declared_type = self.parse_type()
         self.expect_range_word("від", "Звідки крутимось? Після типу чекаю «від» і початок, а тут {found}.")
         self.enter(first)
@@ -368,9 +364,7 @@ class Parser:
         end = self.parse_expression()
         self.expect(NEWLINE, "Заголовок циклу скінчився, а далі {found}? Тіло циклу пиши з нового рядка.")
         body = self.parse_loop_body(first)
-        node = ForNode(first.line, first.column, name.text, declared_type, start, end, body)
-        node.type_at = type_at
-        return node
+        return ForNode(first.line, first.column, name.text, declared_type, start, end, body)
 
     def parse_loop_body(self, opener):
         """The block of a loop and its closer; ends the nesting level the header entered."""
@@ -440,26 +434,20 @@ class Parser:
                             f"чекаю «,» або «)», а тут {{found}}.")
         self.expect_keyword("на", "Шо на виході? Після «)» чекаю «на виході» і тип результату, а тут {found}.")
         self.expect_keyword("виході", "Після «на» чекаю «виході» і тип результату, а тут {found}.")
-        type_at = self.peek()
         result_type = self.parse_type()
         self.expect(NEWLINE, "Заголовок «маю дєло» скінчився, а далі {found}? Тіло пиши з нового рядка.")
         self.enter(first)
         body = self.parse_body(first, "функції «" + name.text + "»")
         self.leave()
         self.eat()                           # порішали
-        node = FunctionNode(first.line, first.column, name.text, parameters, result_type, body)
-        node.type_at = type_at
-        return node
+        return FunctionNode(first.line, first.column, name.text, parameters, result_type, body)
 
     def parse_parameter(self):
         # parameter = IDENT, "тіпа", type
         name = self.expect_declared_name("параметра", "«(» або «,»")
         self.expect_keyword("тіпа", f"Де «тіпа», шеф? Після параметра «{name.text}» треба вказати тип, "
                                     f"а тут {{found}}.")
-        type_at = self.peek()
-        node = ParameterNode(name.line, name.column, name.text, self.parse_type())
-        node.type_at = type_at
-        return node
+        return ParameterNode(name.line, name.column, name.text, self.parse_type())
 
     def parse_body(self, opener, what):
         """A function body: a block closed by порішали, which is left unconsumed."""
@@ -539,15 +527,12 @@ class Parser:
             self.expect_keyword("даю", "Де «даю», шеф? Після «зуб» треба «даю», а тут {found}.")
         name = self.expect_declared_name("поля", "«зуб даю» чи «мутна тєма»")
         self.expect_keyword("тіпа", f"Де «тіпа», шеф? Після поля «{name.text}» треба вказати тип, а тут {{found}}.")
-        type_at = self.peek()
         declared_type = self.parse_type()
         default = None
         if self.at_keyword("це"):
             self.eat()
             default = self.parse_expression()
-        node = FieldNode(first.line, first.column, name.text, declared_type, mutable, index, default)
-        node.type_at = type_at
-        return node
+        return FieldNode(first.line, first.column, name.text, declared_type, mutable, index, default)
 
     def expect_declared_name(self, what, phrase):
         token = self.peek()

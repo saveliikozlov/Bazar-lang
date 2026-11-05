@@ -92,6 +92,25 @@ def _quote(text):
     return '"' + text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'
 
 
+# --------------------------------------------------------------- types
+
+@dataclass
+class TypeNode(ASTNode):
+    """Base class for a type as written in the source, positioned at its first token.
+
+    It prints on its owner's line as an attribute (type=i32), never as a child
+    node. The semantic pass turns it into a bazar_types.Type."""
+
+
+@dataclass
+class NamedTypeNode(TypeNode):
+    """A type named by one word: i32, i64, bool (canonical), or a structure name."""
+    name: str
+
+    def __str__(self):
+        return self.name
+
+
 # ------------------------------------------------------------- program
 
 @dataclass
@@ -128,7 +147,7 @@ class BlockNode(ASTNode):
 class DeclarationNode(StmtNode):
     """Immutable зуб даю (mutable=false) or mutable мутна тєма (mutable=true)."""
     name: str
-    declared_type: str  # canonical: "i32", "i64", or "bool"
+    declared_type: TypeNode
     mutable: bool
     initializer: ExprNode
 
@@ -144,7 +163,7 @@ class DeclarationNode(StmtNode):
 class ConstantDeclarationNode(StmtNode):
     """Compile-time constant: желєзобетонно NAME тіпа TYPE це EXPR (top level only)."""
     name: str
-    declared_type: str  # canonical: "i32", "i64", or "bool"
+    declared_type: TypeNode
     initializer: ExprNode
 
     def attributes(self):
@@ -206,7 +225,7 @@ class WhileNode(StmtNode):
 class ForNode(StmtNode):
     """Range loop syntax: крутимось NAME тіпа TYPE від EXPR по EXPR ... докрутились."""
     name: str
-    declared_type: str
+    declared_type: TypeNode
     start: ExprNode
     end: ExprNode
     body: BlockNode
@@ -268,7 +287,7 @@ class CallStatementNode(StmtNode):
 class ParameterNode(ASTNode):
     """One parameter: NAME тіпа TYPE."""
     name: str
-    declared_type: str
+    declared_type: TypeNode
 
     def attributes(self):
         return (("name", self.name), ("type", self.declared_type))
@@ -281,7 +300,7 @@ class FunctionNode(StmtNode):
     At the top level it is a function; inside такі діла, a member function."""
     name: str
     parameters: list[ParameterNode]
-    result_type: str
+    result_type: TypeNode
     body: BlockNode
 
     def attributes(self):
@@ -298,7 +317,7 @@ class FieldNode(ASTNode):
     index is the position among the structure's fields, counting from 0.
     default is the constant expression after це, or None (auto constructor)."""
     name: str
-    declared_type: str
+    declared_type: TypeNode
     mutable: bool
     index: int
     default: ExprNode | None = None

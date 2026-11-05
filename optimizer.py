@@ -377,9 +377,11 @@ class Inliner:
         self.count += 1
         moved = []
         # Each parameter becomes a local declaration initialised with the argument.
-        for parameter, argument in zip(function.parameters, call.arguments):
+        # The new declarations reuse the type nodes of the function header: the
+        # function is removed once nobody calls it, so they have one owner again.
+        for parameter, syntax, argument in zip(function.parameters, function.node.parameters, call.arguments):
             parameter.kind = "immutable"
-            declaration = DeclarationNode(call.line, call.column, parameter.name, parameter.type,
+            declaration = DeclarationNode(call.line, call.column, parameter.name, syntax.declared_type,
                                           False, argument)
             declaration.info = parameter
             moved.append(declaration)
@@ -389,7 +391,7 @@ class Inliner:
         # The exit of the body becomes the value that stands where the call stood.
         exit_node = body[-1]
         result = VarInfo(self.renamed("результат", function), function.result, "immutable")
-        declaration = DeclarationNode(exit_node.line, exit_node.column, result.name, result.type,
+        declaration = DeclarationNode(exit_node.line, exit_node.column, result.name, function.node.result_type,
                                       False, exit_node.value)
         declaration.info = result
         moved.append(declaration)

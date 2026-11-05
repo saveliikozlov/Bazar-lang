@@ -246,7 +246,7 @@ class Analyzer:
         for field_node in node.fields:
             if field_node.name in structure.fields:
                 raise error(field_node, f"Поле «{field_node.name}» в «{node.name}» вже є.")
-            field_type = self.resolve_type(field_node.declared_type, field_node)
+            field_type = self.resolve_type(field_node.declared_type)
             structure.fields[field_node.name] = FieldInfo(
                 field_node.name, field_type, field_node.mutable, field_node.index, field_node)
         for method in node.methods:
@@ -262,19 +262,19 @@ class Analyzer:
         for parameter in node.parameters:
             if any(p.name == parameter.name for p in parameters):
                 raise error(parameter, f"Параметр «{parameter.name}» вже є в «{node.name}».")
-            parameter_type = self.resolve_type(parameter.declared_type, parameter)
+            parameter_type = self.resolve_type(parameter.declared_type)
             parameters.append(VarInfo(parameter.name, parameter_type, "param"))
-        result = self.resolve_type(node.result_type, node)
+        result = self.resolve_type(node.result_type)
         return FunctionInfo(node.name, parameters, result, node, owner)
 
-    def resolve_type(self, type_name, node):
-        """The Type that a declaration of node names; an unknown name is an error at its type."""
-        if type_name in BUILTIN_TYPES:
-            return BUILTIN_TYPES[type_name]
-        if type_name in self.structures:
-            return StructType(type_name)
-        raise error(node.type_at, f"Шо за тип «{type_name}»? Такої структури нема, а з вбудованих є "
-                                  f"«дрібняк», «крупняк» і «базар».")
+    def resolve_type(self, node):
+        """The Type that a TypeNode names; an unknown structure name is an error at it."""
+        if node.name in BUILTIN_TYPES:
+            return BUILTIN_TYPES[node.name]
+        if node.name in self.structures:
+            return StructType(node.name)
+        raise error(node, f"Шо за тип «{node.name}»? Такої структури нема, а з вбудованих є "
+                          f"«дрібняк», «крупняк» і «базар».")
 
     def check_structure_cycles(self, structures):
         # Rule 16: an object cannot contain itself, directly or through fields.
@@ -333,7 +333,7 @@ class Analyzer:
     def declare_constant(self, node, scope):
         if node.name in scope.names:
             raise error(node, f"«{node.name}» вже оголошено. Двічі одне ім'я в одному місці не канає.")
-        declared = self.resolve_type(node.declared_type, node)
+        declared = self.resolve_type(node.declared_type)
         if not is_scalar(declared):
             raise error(node, "«Желєзобетонно» буває тільки «дрібняк», «крупняк» або «базар».")
         context = Context(None, scope, const_only=True)
@@ -472,9 +472,9 @@ class Analyzer:
     def check_for(self, node, context):
         # Rules 27, 28: the bounds are checked outside the counter's scope; the
         # counter and the outer block of the body are one scope.
-        counter_type = self.resolve_type(node.declared_type, node)
+        counter_type = self.resolve_type(node.declared_type)
         if not is_integer(counter_type):
-            raise error(node.type_at, f"Лічильник «{node.name}» має бути цілим числом, "
+            raise error(node.declared_type, f"Лічильник «{node.name}» має бути цілим числом, "
                                       f"а не «{word(counter_type)}».")
         self.require(node.start, counter_type, context)
         self.require(node.end, counter_type, context)
@@ -485,7 +485,7 @@ class Analyzer:
         self.check_statements(node.body.statements, Context(context.function, scope, in_loop=True))
 
     def check_declaration(self, node, context):
-        declared = self.resolve_type(node.declared_type, node)
+        declared = self.resolve_type(node.declared_type)
         # The initializer cannot see the name it declares: check it first.
         self.require(node.initializer, declared, context)
         if node.name in context.scope.names:
@@ -647,7 +647,8 @@ class Analyzer:
             self.require(node.right, I64, context)
         if operator in EQUALITY:
             if not is_comparable(operand_type):
-                raise error(node, f"Об'єкти «{word(operand_type)}» не порівнюють: «рівно» тільки для чисел і базару.")
+                raise error(node, f"Об'єкти «{word(operand_type)}» не порівнюють: "
+                                  f"«рівно» тільки для чисел і базару.")
             return BOOL
         if not is_integer(operand_type):
             raise error(node, f"Тут треба цілі числа, а не «{word(operand_type)}».")

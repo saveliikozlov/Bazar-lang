@@ -10,7 +10,7 @@ from ast_nodes import (  # noqa: E402
     AssignmentNode, ASTNode, BinaryNode, BlockNode, BooleanNode, CallNode, CallStatementNode,
     ConstantDeclarationNode, DeclarationNode,
     ExitNode, ExprNode, FieldAccessNode, FieldAssignmentNode, FunctionNode, IdentifierNode, IfNode,
-    IntegerNode, MemberCallNode, NewObjectNode, PrintNode, ProgramNode, ReadNode, ReturnNode,
+    IntegerNode, MemberCallNode, NamedTypeNode, NewObjectNode, PrintNode, ProgramNode, ReadNode, ReturnNode,
     StmtNode, StringNode, StructureNode, UnaryNode,
 )
 from lexer import KEYWORDS, LexError, lex  # noqa: E402
@@ -35,9 +35,11 @@ class HierarchyTest(unittest.TestCase):
         self.assertEqual((program.line, program.column), (1, 3))
         declaration = program.statements[0]
         self.assertIsInstance(declaration, DeclarationNode)
-        self.assertEqual((declaration.name, declaration.declared_type, declaration.mutable),
+        self.assertEqual((declaration.name, declaration.declared_type.name, declaration.mutable),
                          ("ж", "i64", True))
         self.assertEqual((declaration.line, declaration.column), (1, 3))
+        self.assertIsInstance(declaration.declared_type, NamedTypeNode)
+        self.assertEqual((declaration.declared_type.line, declaration.declared_type.column), (1, 35))
         unary = declaration.initializer
         self.assertIsInstance(unary, UnaryNode)
         self.assertEqual((unary.operator, unary.line, unary.column), ("neg", 1, 55))
@@ -48,7 +50,7 @@ class HierarchyTest(unittest.TestCase):
         constant = program.statements[0]
         self.assertIsInstance(constant, ConstantDeclarationNode)
         self.assertNotIsInstance(constant, DeclarationNode)
-        self.assertEqual((constant.name, constant.declared_type), ("Н", "i64"))
+        self.assertEqual((constant.name, constant.declared_type.name), ("Н", "i64"))
         self.assertEqual((constant.line, constant.column), (1, 1))
         self.assertEqual(constant.initializer.operator, "mul")
         self.assertEqual(constant.dump().splitlines()[0],
@@ -58,7 +60,7 @@ class HierarchyTest(unittest.TestCase):
         for word, canonical in (("дрібняк", "i32"), ("крупняк", "i64"), ("базар", "bool")):
             with self.subTest(word=word):
                 declaration = parse(f"зуб даю x тіпа {word} це 1").statements[0]
-                self.assertEqual(declaration.declared_type, canonical)
+                self.assertEqual(declaration.declared_type.name, canonical)
                 self.assertFalse(declaration.mutable)
 
     def test_two_word_operators_are_positioned_at_first_word(self):
@@ -343,8 +345,8 @@ class StageTwoParserTest(unittest.TestCase):
         function = parse("маю дєло ф(х тіпа дрібняк, п тіпа Точка) на виході базар\n"
                          "    тримай реально\nпорішали").statements[0]
         self.assertIsInstance(function, FunctionNode)
-        self.assertEqual((function.name, function.result_type), ("ф", "bool"))
-        self.assertEqual([(p.name, p.declared_type) for p in function.parameters],
+        self.assertEqual((function.name, function.result_type.name), ("ф", "bool"))
+        self.assertEqual([(p.name, p.declared_type.name) for p in function.parameters],
                          [("х", "i32"), ("п", "Точка")])
         self.assertIsInstance(function.body.statements[0], ReturnNode)
 
