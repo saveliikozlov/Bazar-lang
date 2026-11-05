@@ -1,0 +1,121 @@
+AI USAGE - Bazar, Stage 3 (loops, the optimizer and a real program)
+Updated: 2026-11-05
+
+TOOLS
+-----
+- Claude Code (Anthropic), the command-line tool, with the model Claude Opus
+  5.5, working in the repository folder on my Linux laptop. It read the Stage 3
+  specification PDF and the code, ran commands (git, python3, llc, lli, clang,
+  npm, code) and edited files. It committed locally after I approved; I push
+  and open the pull request myself.
+- No other AI tools were used for Stage 3. Earlier stages are described in
+  ai_usage.txt and ai_usage_2.txt.
+
+HOW WE WORKED
+-------------
+Claude proposed a design and waited for my decision, then wrote the code, the
+tests and the documentation and showed me the test results. The choice of
+feature and of program and the approval of the syntax and the rules were mine.
+Claude wrote almost all of the text and code in this stage.
+
+PROMPTS
+-------
+My messages from the start of the assignment work, as I sent them (typos
+kept). Earlier messages in the same session only set up the environment
+(getting the course materials from Moodle, cloning the repository, installing
+my VS Code extension), and later messages only concerned how to write this
+file, the format of the commit messages and final checks. Those are not listed;
+no code or design came from them. During that setup Claude read the
+specification and recommended Loops as the feature, which I then chose in
+prompt 1.
+
+ 1. "Okay, now we can talk about additional features. First of all, I really
+    want to implement loops. This is really important for our language and for
+    each language. And then after we will implement loops, I want to go for
+    another steps in the assignment. In the end, when everything will be ready,
+    I would like with you to implement additional features, like for instance
+    fixed size arrays and some others like like in the rust option and result
+    that is option and result options that goes after each call of the function
+    and we need to return them to prevent some throwbacks. Oh and the forgot to
+    say from the Rust again The option the matching case the one match against
+    can return the same thing from rust"
+ 2. "Okay then about syntax selected I accept it It looks good here for me,
+    about the range of course We should use this one because we need to declare
+    a proper range with start and the end, and about draft PR Let's implement
+    firstly the assignment then I will Create a PR myself, because it's already
+    overdue and I don't really see a sense to create it now"
+ 3. "1. Yes, it looks good for me now.
+    2. Let's the bank application, mayber further we will do another one, when
+    we add additional features."
+ 4. "Yes, you may commit the bank program. This inline rule is basically okay.
+    We should just optimize code by removing the unused variable in our code
+    from memory."
+ 5. "Yes, you may comit the optimizer"
+
+PARTS OF THE WORK: WHAT WAS TAKEN, WHAT WAS CHANGED AND WHY
+----------------------------------------------------------
+1. Task 1: the loop syntax and rules
+   My choice of feature (prompt 1). Claude proposed the words крутимось, поки,
+   докрутились and харе, the range form "від A по B", and the rules; I accepted
+   them as they were and confirmed that the range includes both ends (prompt 2).
+   Claude suggested keeping від and по unreserved so that Stage 2 programs using
+   them as names stay valid.
+
+2. Task 1: the implementation (lexer.py, parser.py, ast_nodes.py, semantic.py,
+   codegen.py, grammar.ebnf)
+   Taken as Claude wrote it: the new keywords, WhileNode, ForNode and BreakNode,
+   the semantic checks and the basic blocks. I did not change this code. Claude
+   compares the counter with the end before adding 1, so that a range ending at
+   the largest value of its type stops without overflow.
+
+3. Task 1: tests and documentation
+   Taken as Claude wrote them: 10 end-to-end programs, 28 invalid programs, one
+   AST test, 2 examples, README rules 26-32, the IR excerpt and its explanation,
+   and the updates to LANGUAGE.md and EXAMPLES.md. Claude worked out the expected
+   output of the end-to-end programs by hand; for the invalid programs and the
+   AST test it saved the compiler's output after reading it. Two expectations it
+   wrote were wrong (columns count bytes, not characters) and Claude corrected
+   them after the test failed.
+
+4. VS Code extension
+   Taken as Claude wrote it: hover entries, completion, highlighting and
+   indentation for the loop words, and the updated extension tests. The test of
+   the keyword count changed from 42 to 46 because the language gained 4 words.
+
+5. Fixes outside the feature
+   Claude found these while testing and I accepted them. The llc command in the
+   README failed to link on Linux, so it and check.py now use
+   -relocation-model=pic. check.py now reports a program that never ends as a
+   failed test instead of crashing. An expression of 3000 terms crashed the
+   compiler with a Python traceback; it is now one compilation error line.
+
+6. Task 2: the optimizer (optimizer.py, compiler.py, tests/optimize)
+   Taken as Claude wrote it: all three transformations, the --optimize flag, 8
+   test programs, and the README section with the before/after IR. I approved
+   the inlining rule, that only a top-level function whose single тримай is its
+   last line is inlined (prompt 4). Claude decided that a variable stays when its
+   value could stop the program with an overflow or a division by zero, because
+   removing it would change the output, and that reading a variable to assign it
+   to itself counts as a read.
+
+7. Task 3: the program (programs/bank.txt, its sessions, check.py)
+   My choice of program (prompt 3). Taken as Claude wrote it: the program, its
+   wording, the 3 recorded sessions, the part of check.py that builds a native
+   binary and replays them, and the README section. Claude worked out the
+   expected output of the sessions by hand.
+
+8. This file
+   Drafted by Claude from the session; the next section is mine.
+
+WHAT I UNDERSTOOD
+-----------------
+Now bazar has implementations of loops with "крутимось поки / від.../по..." main keywords. Under the hood those are just transitions between instructions with different blocks of instructions depending on the loop type. Moreover,
+the loops have pre-check to check the correctness of the condition, whether the it is realistic or not, is the range empty or not. The counter firstly is compared with the end before the increment, when it equals the end the loop
+ends and increment does not happen, in case if we want firstly add then compare, it could appear as an error, for example for the integer overflow case. Furthermore the loops has the keyword "харе" that transit to the end of the
+loop, it is mainly uses the stack logic, so we can go out of the loop in innermost loop properly. Our bazar language now has the optimization techniques. Semantic has the VarInfo objects, every declaration has one VarInfo and
+each for each use reference to it. It is really important to have those object, because, for instance in comparison with just name referencing, we could get more irrelevant issues, it could be count as the reference inside the
+inner scope of some logic even in case when it was not called, it would rubbish. About arithmetic, in some cases when user inputs something, we do not know what will be in the end, the output is unknown, it can end as the error,
+so we cannot optimize such cases. We are deleting only literals, variable readings, constant_value operations, calls and ану кажи will never be deleted. Moreover, for better optimization, bazar has inlining which removes the
+function calls and gives us more room for optimization, we have a simple check can_inline, which checks that the last line in the scope should be тримай and there are no others тримай in a function, this one is the easiest
+solution the that тримай problem. Last but not least, our optimizer deletes unused functions if we cannot approach it from main. For better presentation of the loops and some minor optimization we have the bank application
+that uses the loops under the hood and can be optimized with the respectful flag.
