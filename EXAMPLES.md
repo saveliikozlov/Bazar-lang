@@ -432,3 +432,46 @@ Use `з або 0`, or make `ф` return `може дрібняк`.
 ```
 
 The error types differ, `дрібняк` and `крупняк`, and `?` converts none.
+
+## String interpolation — [examples/interpolation.bazar](examples/interpolation.bazar)
+
+Print a receipt with the values inside the text:
+
+```text
+крутимось к тіпа дрібняк від 0 по ПОЗИЦІЙ мінус 1
+    зуб даю сума тіпа крупняк це ціни[к] на кількість[к]
+    якшо реально кількість[к] рівно 0
+        базарь "  #{к плюс 1}: не брали"
+    а нє
+        базарь "  #{к плюс 1}: {кількість[к]} × {ціни[к]} = {сума} грн"
+    отакої
+    перевзувся разом тепер разом плюс сума
+докрутились
+```
+
+The program prints:
+
+```text
+Чек на 3 позиції
+  #1: 4 × 25 = 100 грн
+  #2: не брали
+  #3: 2 × 100 = 200 грн
+Разом: 300 грн, знижка 10%
+До сплати: 270 грн
+Ціни: [25, 40, 100], а дужки пишуть так: { і }
+```
+
+Common errors, each reported when compiling:
+
+```text
+базарь "Разом: 3}"
+```
+
+A lone `}` in a string: write `\}` to print a brace.
+
+```text
+базарь "Разом: {1 + 2}"
+```
+
+Inside the braces is Bazar code, so `+` is an unknown character there too:
+write `{1 плюс 2}`.

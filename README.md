@@ -12,7 +12,8 @@ with `[всюди 0]`. `може дрібняк` holds `шось(5)` or `нем�
 `вийде дрібняк або облом крупняк` holds `вийшло(5)` or `облом(404)`.
 `розбери` matches a value against patterns, and the compiler checks that
 its `випадок` arms cover every value. `з?` takes the value out of a `може` or
-a `вийде`, or returns `нема` or `облом` from the function. Source files use
+a `вийде`, or returns `нема` or `облом` from the function, and
+`базарь "Разом: {сума} грн"` prints values inside a string. Source files use
 `.bazar`.
 
 The compiler reads UTF-8 source, checks lexical and syntactic structure,
@@ -552,6 +553,36 @@ tag: one side goes on with the value, and the other writes `нема`, or `об�
 with its error, to the caller's result and returns. See
 [examples/try.bazar](examples/try.bazar).
 
+## Extra feature: string interpolation
+
+A string printed by `базарь` may hold `{…}` parts. Each holds one
+expression of any type, and its value is printed in its place exactly as
+`базарь` would print it alone. `\{` and `\}` write braces:
+
+```text
+зуб даю ціна тіпа крупняк це 25
+зуб даю кошик тіпа [крупняк; 2] це [ціна, 40]
+зуб даю знижка тіпа може крупняк це нема
+базарь "Разом: {ціна на 4} грн, кошик {кошик}, знижка {знижка або 0}%"
+базарь "Так пишуть дужки: \{ і \}"
+```
+
+This prints `Разом: 100 грн, кошик [25, 40], знижка 0%` and
+`Так пишуть дужки: { і }`. The values run from left to right, each just
+before it is printed, so a function that prints inside `{…}` prints after the
+text in front of its part. An error inside the braces points at its place in
+the line:
+
+```text
+compilation error: line 1:30: У «{…}» один вираз: після нього чекаю «}», а тут число 2.
+```
+
+for `базарь "Разом: {1 2}"`. The lexer reads each part as its own run of
+tokens and the parser as one expression, so a string without `{…}` stays a
+plain string. In the IR every value is one `printf` with the text in front
+of it, which is escaped so that `%` prints as itself. See
+[examples/interpolation.bazar](examples/interpolation.bazar).
+
 ## Semantic rules
 
 The semantic pass ([semantic.py](semantic.py)) runs on the AST before code
@@ -669,8 +700,8 @@ that follows it and one in `tests/invalid` that breaks it (named in brackets).
     `Коло { центр: Точка { х: 1, у: 2 }, радіус: 5 }`, an array as its
     elements: `[1, 2, 3]`, and the values of `може` and `вийде` as they are
     written: `шось(5)`, `нема`, `вийшло(5)`, `облом(404)`. Every `базарь` ends
-    with one newline; a `\n` inside a string adds another
-    [`print_objects_nested`, `print_strings_and_bools`].
+    with one newline; a `\n` inside a string adds another, and `%` prints as
+    itself [`print_objects_nested`, `print_strings_and_bools`].
 24. `всьо розходимось N` prints `Всьо, розходимось: N` on its own line and
     exits with 0; statements after it do not run.
 25. Overflow is an error, never a wraparound: the lexer rejects literals that
@@ -843,6 +874,20 @@ that follows it and one in `tests/invalid` that breaks it (named in brackets).
     `try_payload_wrong_type`, `try_alone_is_not_a_statement`,
     `try_in_constant`, `try_in_assignment_place`].
 
+**String interpolation**
+
+48. A `{…}` part of a string holds exactly one expression, of any type, on
+    the same line; it sees the names the statement sees. The parts run from
+    left to right, each just before its value is printed as rule 23
+    describes. A quote, a `{`, or a line end before the closing `}`, empty
+    braces, and a `}` without `{` are lexical errors; `\{` and `\}` print
+    braces [`interpolation_basics`, `interpolation_order` /
+    `interpolation_unclosed_brace`, `interpolation_lone_closing_brace`,
+    `interpolation_empty_braces`, `interpolation_nested_braces`,
+    `interpolation_unknown_character`, `interpolation_two_expressions`,
+    `interpolation_missing_operand`, `interpolation_unknown_name`,
+    `interpolation_none_without_type`, `interpolation_string_outside_print`].
+
 ## Code generation
 
 [codegen.py](codegen.py) builds the module with `llvmlite.ir`; the only IR
@@ -918,6 +963,7 @@ The function is then removed as unused.
 | a `?` anywhere in the body | it returns from the function, and in the caller it would return from the caller |
 | a call in the condition of `крутимось поки` | the condition runs on every pass, the moved body only once |
 | a call on the right of `і ше` or `або` | it may never run |
+| a call in any `{…}` part of a string but the first | the parts before it are printed before it runs |
 | a call after something that is not a plain value, as in `ф() плюс г()` for `г` | the moved body would run first and change the order of effects |
 
 For this program, `другий` is called once, its parameter `перший` is never read,
@@ -1072,17 +1118,17 @@ exits nonzero if any did:
 
 | Folder | Count | Check |
 | --- | --- | --- |
-| `tests/valid` | 55 | `--ast` output equals `NAME.ast` (front-end tests; some Stage 1 ones use undeclared names on purpose); with `--optimize`, it equals `NAME.optimized.ast` when the optimizer changes the tree, or `NAME.optimized.err` for the 16 that stop in the semantic pass |
-| `tests/invalid` | 337 | compiling exits 1, prints exactly `NAME.err`, and writes no file |
-| `tests/run` | 43 | end to end: compiled, run with `lli` (or built with `llc` and `clang`), stdout equals `NAME.expected`; `NAME.in` is stdin; `NAME.error` is the expected run-time error |
-| `examples` | 14 | compiling succeeds |
+| `tests/valid` | 56 | `--ast` output equals `NAME.ast` (front-end tests; some Stage 1 ones use undeclared names on purpose); with `--optimize`, it equals `NAME.optimized.ast` when the optimizer changes the tree, or `NAME.optimized.err` for the 16 that stop in the semantic pass |
+| `tests/invalid` | 347 | compiling exits 1, prints exactly `NAME.err`, and writes no file |
+| `tests/run` | 44 | end to end: compiled, run with `lli` (or built with `llc` and `clang`), stdout equals `NAME.expected`; `NAME.in` is stdin; `NAME.error` is the expected run-time error |
+| `examples` | 15 | compiling succeeds |
 | `programs` | 3 sessions | built with `llc` and `clang`; the native binary's stdout equals the session's `.expected` |
-| `tests/optimize` | 13 | `--optimize --ast` output equals `NAME.ast`, and stdout equals `NAME.expected` with and without the flag; `NAME.in` and `NAME.error` as in `tests/run` |
+| `tests/optimize` | 14 | `--optimize --ast` output equals `NAME.ast`, and stdout equals `NAME.expected` with and without the flag; `NAME.in` and `NAME.error` as in `tests/run` |
 
-The `tests/valid`, `tests/invalid`, `tests/run`, `examples`, and `programs` checks each run twice, without the flag and with `--optimize`. In `tests/valid`, 28 trees are unchanged by the optimizer and still equal `NAME.ast`; 11 change (unused declarations and functions removed, `покажи` inlined), and their trees are in `NAME.optimized.ast`; 16 deliberately use undeclared names, so they stop in the semantic pass before the optimizer and print the same error as without the flag, pinned in `NAME.optimized.err`.
+The `tests/valid`, `tests/invalid`, `tests/run`, `examples`, and `programs` checks each run twice, without the flag and with `--optimize`. In `tests/valid`, 29 trees are unchanged by the optimizer and still equal `NAME.ast`; 11 change (unused declarations and functions removed, `покажи` inlined), and their trees are in `NAME.optimized.ast`; 16 deliberately use undeclared names, so they stop in the semantic pass before the optimizer and print the same error as without the flag, pinned in `NAME.optimized.err`.
 
 LLVM tools are looked up in `$LLVM_BIN`, then on `PATH`, then in the
-Homebrew folders. The 131 unit tests cover the lexer, the parser, the type
+Homebrew folders. The 134 unit tests cover the lexer, the parser, the type
 values, the exhaustiveness algorithm, the semantic pass's symbol table and annotations, and the CLI.
 
 ## VS Code extension
