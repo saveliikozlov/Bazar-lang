@@ -9,7 +9,7 @@
   "surroundingPairs": [["(", ")"]],
   "wordPattern": "[A-Za-z0-9_А-яЁёІіЇїЄєҐґ'ʼ]+",
   "indentationRules": {
-    "increaseIndentPattern": "^\\s*(якшо\\s+реально(\\s.*)?|а\\s+нє)\\s*$",
-    "decreaseIndentPattern": "^\\s*(отакої|а\\s+нє)(?![A-Za-z0-9_А-яЁёІіЇїЄєҐґ]).*$"
+    "increaseIndentPattern": "^\\s*(якшо\\s+реально(\\s.*)?|крутимось(\\s.*)?|а\\s+нє)\\s*$",
+    "decreaseIndentPattern": "^\\s*(отакої|докрутились|а\\s+нє)(?![A-Za-z0-9_А-яЁёІіЇїЄєҐґ]).*$"
   }
 }

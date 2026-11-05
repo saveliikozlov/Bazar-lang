@@ -8,7 +8,7 @@ root `README.md`.
 
 - **Highlighting.** Keywords, types, Booleans, operators, numbers, parentheses,
   string literals with their escapes, and `чутки:` comments have distinct
-  scopes; `маю дєло`, `такі діла`, `тримай`, `склепай`, and `ану кажи` too. Matching uses complete words:
+  scopes; `маю дєло`, `такі діла`, `тримай`, `склепай`, `ану кажи`, and the loop words `крутимось`, `поки`, `докрутились`, and `харе` too; `від` and `по` are highlighted only in a loop header. Matching uses complete words:
   `дрібняк_2` and `базарний` are not highlighted as keywords.
 - **Completion.** Phrases and constructs (`желєзобетонно`, `зуб даю`, `мутна тєма`,
   `якшо реально` with `а нє` and `отакої`, `базарь`, `всьо розходимось`,
