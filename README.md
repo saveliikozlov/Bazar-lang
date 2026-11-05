@@ -8,7 +8,9 @@ Conditions start with `якшо реально`, may have an `а нє` branch, a
 `отакої`. Loops start with `крутимось` and end with `докрутились`. Functions
 start with `маю дєло`, structures with `такі діла`, and both end with
 `порішали`. Fixed-size arrays have types like `[дрібняк; 5]` and are filled
-with `[всюди 0]`. Source files use `.bazar`.
+with `[всюди 0]`. `може дрібняк` holds `шось(5)` or `нема`, and
+`вийде дрібняк або облом крупняк` holds `вийшло(5)` or `облом(404)`. Source
+files use `.bazar`.
 
 The compiler reads UTF-8 source, checks lexical and syntactic structure,
 runs a semantic pass over the AST, and generates LLVM IR through the
@@ -82,6 +84,8 @@ writes one line to stderr and exits with 1:
 | `базар` | Boolean (`bool`) | `реально` (true), `гон` (false) |
 | a structure name | an object of a `такі діла` structure | its fields |
 | `[TYPE; SIZE]` | a fixed-size array of SIZE elements of TYPE | SIZE from 1 to 2147483647 |
+| `може TYPE` | an optional value (`Option`) | `шось(x)` or `нема` |
+| `вийде TYPE або облом TYPE` | a result or an error (`Result`) | `вийшло(x)` or `облом(e)` |
 
 A declaration always has a name, a type after `тіпа`, and an initial value
 after `це`.
@@ -422,6 +426,41 @@ ok:
 One unsigned comparison catches both a negative index and one past the end.
 An index known at compile time has no check.
 
+## Extra feature: може and вийде
+
+`може T` ("maybe") holds a value, `шось(x)` ("something"), or nothing, `нема`
+("there is none"). `вийде T або облом E` ("it will work out, or a flop") holds
+a result, `вийшло(x)` ("it worked out"), or an error, `облом(e)`. `шось(5)`
+alone is a `може крупняк`; the other three values take their type from the
+type expected there, like `[всюди 0]`. `з.шось`, `з.нема`, `р.вийшло`, and
+`р.облом` check which value is held, and `з або x` gives the value held in
+`з`, or `x`, which runs only when `з` holds `нема` or `облом`:
+
+```text
+маю дєло ділення(а1 тіпа дрібняк, б1 тіпа дрібняк) на виході вийде дрібняк або облом крупняк
+    якшо реально б1 рівно 0
+        тримай облом(404)
+    отакої
+    тримай вийшло(а1 ділити на б1)
+порішали
+зуб даю р тіпа вийде дрібняк або облом крупняк це ділення(7, 0)
+базарь р
+базарь р.облом
+базарь р або мінус 1
+зуб даю з тіпа може дрібняк це нема
+базарь (з або 5) плюс 1
+базарь шось(5) рівно шось(5)
+```
+
+This prints `облом(404)`, `реально`, `-1`, `6`, and `реально`. On a `базар`,
+`або` is logical OR as before. As a fallback it keeps OR's precedence, the
+lowest, so `(з або 5) плюс 1` needs its parentheses. `рівно` compares the
+tags first, and the values only when both hold one. Both types are values,
+copied like arrays and objects; in memory `може T` is `{i1, T}` and
+`вийде T або облом E` is `{i1, T, E}`, whose tag is 1 for `шось` and `вийшло`.
+Pattern matching and the `?` operator will add more ways to take the value
+out. See [examples/variants.bazar](examples/variants.bazar).
+
 ## Semantic rules
 
 The semantic pass ([semantic.py](semantic.py)) runs on the AST before code
@@ -469,9 +508,9 @@ that follows it and one in `tests/invalid` that breaks it (named in brackets).
 
 9. There is no implicit conversion between `дрібняк`, `крупняк`, and
    `базар`. Arithmetic needs two integers of one type; `більше` and `менше`
-   compare integers; `рівно` and `не рівно` compare two integers, two
-   Booleans, or two arrays of them of one type, never objects; a condition
-   is a `базар`
+   compare integers; `рівно` and `не рівно` compare two values of one type
+   built from integers and Booleans (arrays, `може`, `вийде`), never objects;
+   a condition is a `базар`
    [`semantic_mixed_integer_widths`, `semantic_arithmetic_on_bool`,
    `semantic_condition_not_bool`, `semantic_compare_objects`].
 10. Integer literals and `ану кажи` take their type from context; with no
@@ -494,8 +533,9 @@ that follows it and one in `tests/invalid` that breaks it (named in brackets).
     `semantic_exit_with_bool`].
 15. A structure may be the type of a variable, a parameter, a result, a
     field, or an array element, but cannot contain itself, directly or
-    through other fields and arrays [`semantic_structure_contains_itself`,
-    `array_structure_contains_itself`].
+    through other fields, arrays, `може`, and `вийде`
+    [`semantic_structure_contains_itself`, `array_structure_contains_itself`,
+    `variant_structure_contains_itself`].
 16. `склепай Т(…)` names an existing structure and gives values of the field
     types in field order; fields left out need a default
     [`auto_constructor` / `semantic_new_object_wrong_value_type`,
@@ -534,8 +574,9 @@ that follows it and one in `tests/invalid` that breaks it (named in brackets).
 
 23. `базарь` prints integers in decimal, Booleans as `реально` or `гон`,
     strings as written, an object as its type and its fields:
-    `Коло { центр: Точка { х: 1, у: 2 }, радіус: 5 }`, and an array as its
-    elements: `[1, 2, 3]`. Every `базарь` ends
+    `Коло { центр: Точка { х: 1, у: 2 }, радіус: 5 }`, an array as its
+    elements: `[1, 2, 3]`, and the values of `може` and `вийде` as they are
+    written: `шось(5)`, `нема`, `вийшло(5)`, `облом(404)`. Every `базарь` ends
     with one newline; a `\n` inside a string adds another
     [`print_objects_nested`, `print_strings_and_bools`].
 24. `всьо розходимось N` prints `Всьо, розходимось: N` on its own line and
@@ -630,6 +671,35 @@ that follows it and one in `tests/invalid` that breaks it (named in brackets).
     `array_for_each_not_array`, `array_for_each_counter_assigned`,
     `array_for_each_fill`].
 
+**може and вийде**
+
+39. `може T` and `вийде T або облом E` take any types, and are the types of
+    variables, parameters, results, fields, and elements, but not of
+    constants, and a field of them has no `це`. `шось(x)` is a `може` of the
+    type of x unless a `може` is expected; `нема` needs an expected `може`, and
+    `вийшло(x)` and `облом(e)` an expected `вийде`, whose types x and e have
+    exactly [`variants_basics` / `variant_none_without_type`,
+    `variant_ok_without_type`, `variant_err_for_option`,
+    `variant_none_for_integer`, `variant_some_wrong_type`,
+    `variant_err_wrong_type`, `variant_both_sides_need_type`,
+    `variant_constant`, `variant_field_default`].
+40. `з.шось` and `з.нема` need a `може`, `р.вийшло` and `р.облом` a `вийде`;
+    each is a `базар`, takes no parentheses, and cannot be assigned
+    [`variants_basics` / `variant_wrong_check`, `variant_unknown_field`,
+    `variant_check_on_integer`, `variant_check_with_parentheses`,
+    `variant_check_assigned`].
+41. `з або x` with a `може` or `вийде` on the left gives the value of `шось`
+    or `вийшло`, and x must have exactly that type; x runs only when the left
+    side holds `нема` or `облом`. With a `базар` on the left, `або` is logical
+    OR; any other left side is an error [`variants_fallback_is_lazy` /
+    `variant_fallback_wrong_type`, `variant_fallback_result_wrong_type`,
+    `variant_fallback_on_integer`].
+42. `може` and `вийде` are values: copies share no memory (rule 18). `рівно`
+    and `не рівно` need equal types whose parts compare (rule 9); arithmetic,
+    conditions, and `всьо розходимось` take neither [`variants_are_values` /
+    `variant_compare_structures`, `variant_compare_different_types`,
+    `variant_arithmetic`, `variant_condition`, `variant_exit_value`].
+
 ## Code generation
 
 [codegen.py](codegen.py) builds the module with `llvmlite.ir`; the only IR
@@ -638,8 +708,10 @@ text the compiler writes is `str(module)`.
 - **Structures**: an identified struct type `bz.Точка` per structure. An
   object is an alloca of it; a field is reached with a `gep` by the field's
   index from the symbol table.
-- **Arrays and objects** stay in memory and are copied with `llvm.memcpy`;
-  see [Arrays and objects in the IR](#arrays-and-objects-in-the-ir).
+- **Arrays, objects, `може`, and `вийде`** stay in memory and are copied with
+  `llvm.memcpy`; see [Arrays and objects in the IR](#arrays-and-objects-in-the-ir).
+  `може T` is the literal struct `{i1, T}` and `вийде T або облом E` is
+  `{i1, T, E}`; `з або x` is a branch on the tag and a `phi`.
 - **Functions**: `bz.NAME` per function and `bz.Точка.NAME` per member
   function, whose first parameter is a pointer to the object. Every function
   is declared before any body, so forward calls resolve. The `bz.` prefix
@@ -830,8 +902,11 @@ flags: `FunctionNode` its `result` and `parameters` (each with a `type`),
 `MemberCallNode` their `arguments`, and `CallStatementNode`
 `member_call=true` when the chain ends in a member call. A list prints its
 items under the label, or `label: []` when empty. Types are `i32`, `i64`,
-`bool`, a structure name, or an array type with its size as written in the
-source, such as `[[i32; 3]; Н плюс 1]`.
+`bool`, a structure name, an array type with its size as written in the
+source, such as `[[i32; 3]; Н плюс 1]`, `Option<i32>`, or `Result<i32, i64>`.
+A `VariantNode` prints `variant=some`, `none`, `ok`, or `err`. The fallback
+`з або x` prints as `operator=or`, like logical OR; the semantic pass tells
+them apart by the type on the left.
 
 ## Tests
 
@@ -847,17 +922,17 @@ exits nonzero if any did:
 
 | Folder | Count | Check |
 | --- | --- | --- |
-| `tests/valid` | 52 | `--ast` output equals `NAME.ast` (front-end tests; some Stage 1 ones use undeclared names on purpose); with `--optimize`, it equals `NAME.optimized.ast` when the optimizer changes the tree, or `NAME.optimized.err` for the 16 that stop in the semantic pass |
-| `tests/invalid` | 269 | compiling exits 1, prints exactly `NAME.err`, and writes no file |
-| `tests/run` | 36 | end to end: compiled, run with `lli` (or built with `llc` and `clang`), stdout equals `NAME.expected`; `NAME.in` is stdin; `NAME.error` is the expected run-time error |
-| `examples` | 11 | compiling succeeds |
+| `tests/valid` | 53 | `--ast` output equals `NAME.ast` (front-end tests; some Stage 1 ones use undeclared names on purpose); with `--optimize`, it equals `NAME.optimized.ast` when the optimizer changes the tree, or `NAME.optimized.err` for the 16 that stop in the semantic pass |
+| `tests/invalid` | 297 | compiling exits 1, prints exactly `NAME.err`, and writes no file |
+| `tests/run` | 39 | end to end: compiled, run with `lli` (or built with `llc` and `clang`), stdout equals `NAME.expected`; `NAME.in` is stdin; `NAME.error` is the expected run-time error |
+| `examples` | 12 | compiling succeeds |
 | `programs` | 3 sessions | built with `llc` and `clang`; the native binary's stdout equals the session's `.expected` |
-| `tests/optimize` | 10 | `--optimize --ast` output equals `NAME.ast`, and stdout equals `NAME.expected` with and without the flag; `NAME.in` and `NAME.error` as in `tests/run` |
+| `tests/optimize` | 11 | `--optimize --ast` output equals `NAME.ast`, and stdout equals `NAME.expected` with and without the flag; `NAME.in` and `NAME.error` as in `tests/run` |
 
-The `tests/valid`, `tests/invalid`, `tests/run`, `examples`, and `programs` checks each run twice, without the flag and with `--optimize`. In `tests/valid`, 25 trees are unchanged by the optimizer and still equal `NAME.ast`; 11 change (unused declarations and functions removed, `покажи` inlined), and their trees are in `NAME.optimized.ast`; 16 deliberately use undeclared names, so they stop in the semantic pass before the optimizer and print the same error as without the flag, pinned in `NAME.optimized.err`.
+The `tests/valid`, `tests/invalid`, `tests/run`, `examples`, and `programs` checks each run twice, without the flag and with `--optimize`. In `tests/valid`, 26 trees are unchanged by the optimizer and still equal `NAME.ast`; 11 change (unused declarations and functions removed, `покажи` inlined), and their trees are in `NAME.optimized.ast`; 16 deliberately use undeclared names, so they stop in the semantic pass before the optimizer and print the same error as without the flag, pinned in `NAME.optimized.err`.
 
 LLVM tools are looked up in `$LLVM_BIN`, then on `PATH`, then in the
-Homebrew folders. The 118 unit tests cover the lexer, the parser, the type
+Homebrew folders. The 123 unit tests cover the lexer, the parser, the type
 values, the semantic pass's symbol table and annotations, and the CLI.
 
 ## VS Code extension
@@ -889,7 +964,7 @@ grammar.ebnf  LANGUAGE.md  EXAMPLES.md  README.md  requirements.txt
 lexer.py       byte-oriented lexer state machine
 parser.py      recursive-descent parser, one method per grammar rule
 ast_nodes.py   AST classes and stable dump
-bazar_types.py the resolved types: integers, базар, structures, arrays
+bazar_types.py the resolved types: integers, базар, structures, arrays, може, вийде
 semantic.py    semantic pass and symbol table
 optimizer.py   the transformations behind --optimize
 codegen.py     LLVM IR through the llvmlite builder

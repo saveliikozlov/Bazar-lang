@@ -271,3 +271,47 @@ Common array errors, each reported when compiling:
 An index known at compile time must be from 0 to 2. An index computed at run
 time is checked then, and the program stops with
 `помилка виконання: … номер за межами масиву: тут можна від 0 до 2`.
+
+## може and вийде — [examples/variants.bazar](examples/variants.bazar)
+
+Find the price of a stall, which may not exist, and split it between people,
+which fails for nobody:
+
+```text
+маю дєло на_кожного(сума тіпа крупняк, люди тіпа крупняк) на виході вийде крупняк або облом дрібняк
+    якшо реально люди менше 1
+        тримай облом(400)
+    отакої
+    тримай вийшло(сума ділити на люди)
+порішали
+```
+
+`ціна` in the example file returns `шось(ціна)` or `нема`, and the program
+continues with `знайдена або 0` and `частка або мінус 1`. With input `3 4` it
+prints `вийшло(300)` and `Всьо, розходимось: 300`; with input `5 0` it prints
+`Такого лотка нема`, `облом(400)`, and `Всьо, розходимось: -1`.
+
+Common errors, each reported when compiling:
+
+```text
+базарь нема
+```
+
+`нема` does not know which `може` it is: declare it with `тіпа`.
+
+```text
+зуб даю з тіпа може дрібняк це нема
+базарь з або гон
+```
+
+The fallback after `або` must have the type that `шось` holds, here `дрібняк`.
+
+```text
+зуб даю з тіпа може базар це шось(реально)
+якшо реально з
+    базарь 1
+отакої
+```
+
+A condition is a `базар`, not a `може базар`: write `якшо реально з або гон`
+or `якшо реально з.шось`.

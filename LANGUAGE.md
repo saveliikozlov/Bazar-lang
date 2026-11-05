@@ -1,4 +1,4 @@
-# Bazar («Базар») — language specification, version 0.4
+# Bazar («Базар») — language specification, version 0.5
 
 Bazar is a small imperative language whose keywords are Ukrainian/surzhyk
 phrases. Its motto means: *Bazar is a language where you answer for your words.*
@@ -8,8 +8,9 @@ block ends explicitly with `отакої`. Source files use `.bazar`.
 This document describes the lexer, parser, AST, and semantics. Version 0.3
 (Stage 2) adds functions, structures, member functions, `ану кажи`, string
 printing, and the auto constructor; the semantic pass enforces every rule,
-and the compiler generates LLVM IR. Version 0.4 adds fixed-size arrays. The
-full numbered rule list is in
+and the compiler generates LLVM IR. Version 0.4 adds fixed-size arrays, and
+version 0.5 the `може` (option) and `вийде` (result) types. The full numbered
+rule list is in
 [README.md](README.md#semantic-rules). The authoritative
 syntax is [grammar.ebnf](grammar.ebnf). Programs are in [examples/](examples)
 and explained in [EXAMPLES.md](EXAMPLES.md).
@@ -43,8 +44,11 @@ Each statement occupies one physical line. `якшо реально`, `маю д
 Expressions add calls `f(a, b)`, field access `o.f`, member calls `o.m(a)`,
 object creation `склепай T(a, b)`, and `ану кажи`, which reads one integer.
 Arrays add literals `[a, b, c]`, filled arrays `[всюди x]` (literally
-everywhere), elements `м[і]`, and the length `м.розмір`. `базарь` also prints a
-string literal `"…"`, an object, and an array.
+everywhere), elements `м[і]`, and the length `м.розмір`. `може` and `вийде`
+add their values `шось(x)`, `нема`, `вийшло(x)`, and `облом(e)`, the checks
+`з.шось`, `з.нема`, `р.вийшло`, and `р.облом`, and the fallback `з або x`.
+`базарь` also prints a string literal `"…"`, an object, an array, and those
+values.
 
 ```text
 чутки: time to count the money
@@ -89,6 +93,8 @@ string literal `"…"`, an object, and an array.
 | `базар` | Boolean | `bool` | `реально` (true) / `гон` (false) |
 | a `такі діла` name | object, copied as a value | the structure name | its fields |
 | `[TYPE; SIZE]` | fixed-size array, copied as a value | `[i32; 5]`, with SIZE as written | SIZE elements, SIZE from 1 to 2147483647 |
+| `може TYPE` | optional value, copied as a value | `Option<i32>` | `шось(x)` or `нема` |
+| `вийде TYPE або облом TYPE` | result or error, copied as a value | `Result<i32, i64>` | `вийшло(x)` or `облом(e)` |
 
 ## 3. Expressions
 
@@ -102,7 +108,7 @@ Operators are listed from **highest** to lowest precedence:
 | 4 | `плюс` (+), `мінус` (−) | `add`, `sub` | left |
 | 5 | `рівно` (==), `не рівно` (!=), `більше` (>), `менше` (<) | `eq`, `ne`, `gt`, `lt` | **one per expression level; no chains** |
 | 6 | `і ше` (logical AND) | `and` | left |
-| 7 | `або` (logical OR) | `or` | left |
+| 7 | `або` (logical OR; after a `може` or `вийде`, the fallback) | `or` | left |
 
 ```text
 зуб даю відповідь тіпа дрібняк це 2 плюс 3 на 4             чутки: 2 + (3 * 4)
@@ -142,8 +148,8 @@ Operators are listed from **highest** to lowest precedence:
   `желєзобетонно зуб даю мутна тєма тіпа це дрібняк крупняк базар перевзувся тепер базарь
   всьо розходимось якшо реально а нє отакої гон або і ше рівно не більше менше
   плюс мінус на ділити маю дєло виході тримай порішали такі діла склепай ану кажи
-  крутимось поки докрутились харе всюди чутки`. `від`, `по`, and `з` are not
-  reserved.
+  крутимось поки докрутились харе всюди може вийде шось нема вийшло облом чутки`.
+  `від`, `по`, and `з` are not reserved.
   `тіпа` is entirely Cyrillic: `тіпa` with a final Latin `a` is an identifier,
   rather than the keyword.
 - **Integers.** One or more decimal ASCII digits; leading zeros are allowed.
@@ -247,7 +253,9 @@ ASTNode(line, column)
 ├── FieldNode(name, declared_type, mutable, index, default)
 ├── TypeNode
 │   ├── NamedTypeNode(name)                i32, i64, bool, or a structure name
-│   └── ArrayTypeNode(element, size, size_text)
+│   ├── ArrayTypeNode(element, size, size_text)
+│   ├── OptionTypeNode(inner)              може TYPE
+│   └── ResultTypeNode(ok, error)          вийде TYPE або облом TYPE
 └── ExprNode
     ├── IntegerNode(value)                 digits without leading zeros
     ├── BooleanNode(value)                 True / False
@@ -261,6 +269,7 @@ ASTNode(line, column)
     ├── IndexNode(object, index)           positioned at [
     ├── ArrayLiteralNode(elements)
     ├── ArrayFillNode(value)               [всюди value]
+    ├── VariantNode(variant, value)        some none ok err; value None for нема
     ├── UnaryNode(operator, operand)       operator = neg
     └── BinaryNode(operator, left, right)  add sub mul div eq ne gt lt and or
 ```
