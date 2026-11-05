@@ -16,6 +16,9 @@ generation:
 * FieldAccessNode.field_info: the FieldInfo, whose index is the gep index;
   for розмір of an array it is None, and .length holds the length;
 * IndexNode.index_value: the index when it is known now (and checked), or None;
+* a check з.шось, з.нема, р.вийшло, р.облом is a FieldAccessNode whose
+  field_info is None and whose .variant is some, none, ok, or err;
+* BinaryNode.fallback: True for з або x, whose left side is може or вийде;
 * ConstantDeclarationNode.info.value: the value computed at compile time.
 
 The first error raises CompilationError with the position of the node that
@@ -28,19 +31,21 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from ast_nodes import (
-    ArrayFillNode, ArrayLiteralNode, ArrayTypeNode, ForEachNode, IndexNode, AssignmentNode, BinaryNode, BooleanNode, BreakNode, CallNode, CallStatementNode,
-    ConstantDeclarationNode, DeclarationNode, ExitNode, FieldAccessNode, FieldAssignmentNode, ForNode,
-    FunctionNode, IdentifierNode, IfNode, IntegerNode, MemberCallNode, NewObjectNode, PrintNode,
-    ReadNode, ReturnNode, StringNode, StructureNode, UnaryNode, WhileNode,
+    ArrayFillNode, ArrayLiteralNode, ArrayTypeNode, AssignmentNode, BinaryNode, BooleanNode, BreakNode,
+    CallNode, CallStatementNode, ConstantDeclarationNode, DeclarationNode, ExitNode, FieldAccessNode,
+    FieldAssignmentNode, ForEachNode, ForNode, FunctionNode, IdentifierNode, IfNode, IndexNode, IntegerNode,
+    MemberCallNode, NewObjectNode, OptionTypeNode, PrintNode, ReadNode, ResultTypeNode, ReturnNode,
+    StringNode, StructureNode, UnaryNode, VariantNode, WhileNode,
 )
 from bazar_types import (
-    BOOL, BUILTIN_TYPES, I32, I64, STRING, ArrayType, StructType, Type, contained_structs, is_comparable,
-    is_integer, is_scalar,
+    BOOL, BUILTIN_TYPES, I32, I64, STRING, ArrayType, OptionType, ResultType, StructType, Type,
+    contained_structs, is_comparable, is_integer, is_scalar, is_variant,
 )
 from parser import CompilationError
 
 ARITHMETIC = ("add", "sub", "mul", "div")
 LENGTH = "розмір"                    # the only field of an array
+CHECKS = {"шось": "some", "нема": "none", "вийшло": "ok", "облом": "err"}   # з.шось and the others
 MAX_ARRAY_LENGTH = 2**31 - 1
 ORDERING = ("gt", "lt")
 EQUALITY = ("eq", "ne")
@@ -186,7 +191,20 @@ def is_flexible(node):
         return is_flexible(node.left) and is_flexible(node.right)
     if isinstance(node, ArrayLiteralNode):
         return all(is_flexible(item) for item in node.elements)
+    return isinstance(node, (ArrayFillNode, VariantNode))
+
+
+def needs_context(node):
+    """An expression with no type of its own: [всюди x], нема, вийшло(x), облом(e)."""
+    if isinstance(node, VariantNode):
+        return node.variant != "some"
     return isinstance(node, ArrayFillNode)
+
+
+def first_typed(nodes):
+    """The operand to type first: one with a type of its own, else one that can infer it."""
+    return (next((node for node in nodes if not is_flexible(node)), None)
+            or next((node for node in nodes if not needs_context(node)), nodes[0]))
 
 
 def is_name_chain(node):
@@ -206,7 +224,7 @@ def constant_value(node):
         known = isinstance(node.ref, VarInfo) and node.ref.kind == "const"
         return node.ref.value if known and is_integer(node.ref.type) else None
     if isinstance(node, FieldAccessNode):
-        known = getattr(node, "field_info", True) is None and is_name_chain(node.object)
+        known = getattr(node, "length", None) is not None and is_name_chain(node.object)
         return node.length if known else None
     if isinstance(node, UnaryNode):
         operand = constant_value(node.operand)
@@ -326,6 +344,10 @@ class Analyzer:
         may use; None is a signature or a field, which see every constant."""
         if isinstance(node, ArrayTypeNode):
             return ArrayType(self.resolve_type(node.element, context), self.array_length(node.size, context))
+        if isinstance(node, OptionTypeNode):
+            return OptionType(self.resolve_type(node.inner, context))
+        if isinstance(node, ResultTypeNode):
+            return ResultType(self.resolve_type(node.ok, context), self.resolve_type(node.error, context))
         if node.name in BUILTIN_TYPES:
             return BUILTIN_TYPES[node.name]
         if node.name in self.structures:
@@ -398,6 +420,9 @@ class Analyzer:
             if isinstance(info.type, ArrayType):
                 raise error(node.default, f"Поле «{info.name}» — масив, йому «це» не пишуть: "
                                           f"значення масиву давай у «склепай».")
+            if is_variant(info.type):
+                raise error(node.default, f"Поле «{info.name}» — «{word(info.type)}», йому «це» не пишуть: "
+                                          f"значення давай у «склепай».")
             if not is_scalar(info.type):
                 raise error(node.default, f"Поле «{info.name}» — об'єкт «{info.type}», йому «це» не пишуть: "
                                           f"воно склепається саме, якщо всі поля «{info.type}» мають «це».")
@@ -713,6 +738,8 @@ class Analyzer:
             return self.member_call_type(node, context)
         if isinstance(node, FieldAccessNode):
             object_type = self.expression(node.object, None, context)
+            if is_variant(object_type):
+                return self.check_type(node, object_type)
             if isinstance(object_type, ArrayType):
                 if node.field != LENGTH:
                     raise error(node, f"У масиву нема поля «{node.field}»: є тільки «{LENGTH}».")
@@ -743,6 +770,8 @@ class Analyzer:
             return StructType(structure.name)
         if isinstance(node, IndexNode):
             return self.index_type(node, context)
+        if isinstance(node, VariantNode):
+            return self.variant_type(node, expected, context)
         if isinstance(node, ArrayLiteralNode):
             return self.array_literal_type(node, expected, context)
         if isinstance(node, ArrayFillNode):
@@ -766,6 +795,58 @@ class Analyzer:
         node.index_value = value
         return array_type.element
 
+    def check_type(self, node, object_type):
+        # Rule 40: з.шось and з.нема on може, р.вийшло and р.облом on вийде.
+        allowed = ("шось", "нема") if isinstance(object_type, OptionType) else ("вийшло", "облом")
+        if node.field not in allowed:
+            raise error(node, f"У «{word(object_type)}» нема поля «{node.field}»: є тільки "
+                              f"«{allowed[0]}» і «{allowed[1]}».")
+        node.field_info = None
+        node.variant = CHECKS[node.field]
+        return BOOL
+
+    def variant_type(self, node, expected, context):
+        # Rule 39: шось(x) and нема make може, вийшло(x) and облом(e) make вийде.
+        if node.variant in ("some", "none"):
+            if isinstance(expected, OptionType):
+                if node.value is not None:
+                    self.require(node.value, expected.inner, context)
+                return expected
+            if node.value is None and expected is not None:
+                raise error(node, f"«Нема» робить «може …», а тут чекаю «{word(expected)}».")
+            if node.value is None:
+                raise error(node, "«Нема» не знає, чого нема: тут не видно, який «може» треба. "
+                                  "Вкажи тип через «тіпа».")
+            return OptionType(self.expression(node.value, None, context))
+        word_of = "вийшло" if node.variant == "ok" else "облом"
+        if expected is not None and not isinstance(expected, ResultType):
+            raise error(node, f"«{word_of.capitalize()}» робить «вийде … або облом …», "
+                              f"а тут чекаю «{word(expected)}».")
+        if not isinstance(expected, ResultType):
+            raise error(node, f"«{word_of.capitalize()}» не знає, який тут «вийде … або облом …»: "
+                              f"вкажи тип через «тіпа».")
+        self.require(node.value, expected.ok if node.variant == "ok" else expected.error, context)
+        return expected
+
+    def fallback_type(self, node, expected, context):
+        """з або x: what з holds, or x when it holds nothing; або on базар stays logical OR."""
+        node.fallback = False
+        if is_flexible(node.left):
+            self.require(node.left, BOOL, context)
+            self.require(node.right, BOOL, context)
+            return BOOL
+        left_type = self.expression(node.left, None, context)
+        if left_type == BOOL:
+            self.require(node.right, BOOL, context)
+            return BOOL
+        if not is_variant(left_type):
+            raise error(node.left, f"Типи не б'ються: чекаю «базар», а тут «{word(left_type)}».")
+        # Rule 41: the fallback has the type that шось or вийшло holds.
+        node.fallback = True
+        inner = left_type.inner if isinstance(left_type, OptionType) else left_type.ok
+        self.require(node.right, inner, context)
+        return inner
+
     def array_literal_type(self, node, expected, context):
         """[a, b, c]: all elements of one type, which an expected array gives to literals."""
         if isinstance(expected, ArrayType):
@@ -774,7 +855,7 @@ class Analyzer:
                 self.require(item, element, context)
         else:
             # Like an operator: the first element with its own type sets it.
-            first = next((item for item in node.elements if not is_flexible(item)), node.elements[0])
+            first = first_typed(node.elements)
             element = self.expression(first, None, context)
             for item in node.elements:
                 if item is not first:
@@ -789,6 +870,8 @@ class Analyzer:
 
     def binary_type(self, node, expected, context):
         operator = node.operator
+        if operator == "or":
+            return self.fallback_type(node, expected, context)
         if operator in LOGIC:
             self.require(node.left, BOOL, context)
             self.require(node.right, BOOL, context)
@@ -804,9 +887,11 @@ class Analyzer:
         elif not is_flexible(node.right):
             operand_type = self.expression(node.right, None, context)
             self.require_operand(node.left, operand_type, node, context)
-        elif isinstance(node.left, (ArrayLiteralNode, ArrayFillNode)):
-            operand_type = self.expression(node.left, None, context)
-            self.require_operand(node.right, operand_type, node, context)
+        elif isinstance(node.left, (ArrayLiteralNode, ArrayFillNode, VariantNode)):
+            first = first_typed([node.left, node.right])
+            other = node.right if first is node.left else node.left
+            operand_type = self.expression(first, None, context)
+            self.require_operand(other, operand_type, node, context)
         else:
             operand_type = I64
             self.require(node.left, I64, context)
@@ -814,7 +899,7 @@ class Analyzer:
         if operator in EQUALITY:
             if not is_comparable(operand_type):
                 raise error(node, f"Об'єкти «{word(operand_type)}» не порівнюють: "
-                                  f"«рівно» тільки для чисел, базару й масивів з них.")
+                                  f"«рівно» тільки для чисел, базару й того, що з них складено.")
             return BOOL
         if not is_integer(operand_type):
             raise error(node, f"Тут треба цілі числа, а не «{word(operand_type)}».")

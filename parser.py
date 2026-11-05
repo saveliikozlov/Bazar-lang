@@ -10,15 +10,18 @@ the final byte.
 
 from ast_nodes import (
     ArrayFillNode, ArrayLiteralNode, ArrayTypeNode, AssignmentNode, BinaryNode, BlockNode, BooleanNode,
-    CallNode, CallStatementNode, BreakNode, ConstantDeclarationNode, DeclarationNode, ExitNode,
+    BreakNode, CallNode, CallStatementNode, ConstantDeclarationNode, DeclarationNode, ExitNode,
     FieldAccessNode, FieldAssignmentNode, FieldNode, ForEachNode, ForNode, FunctionNode, IdentifierNode,
-    IfNode, IndexNode, IntegerNode, MemberCallNode, NamedTypeNode, NewObjectNode, ParameterNode, PrintNode,
-    ProgramNode, ReadNode, ReturnNode, StringNode, StructureNode, UnaryNode, WhileNode,
+    IfNode, IndexNode, IntegerNode, MemberCallNode, NamedTypeNode, NewObjectNode, OptionTypeNode,
+    ParameterNode, PrintNode, ProgramNode, ReadNode, ResultTypeNode, ReturnNode, StringNode, StructureNode,
+    UnaryNode, VariantNode, WhileNode,
 )
 from lexer import (COMMA, DOT, EOF, I64_MIN_MAGNITUDE, IDENT, INTEGER, KEYWORD, KEYWORDS, LBRACKET, LPAREN,
                    NEWLINE, RBRACKET, RPAREN, SEMICOLON, STRING, lex)
 
 TYPE_NAMES = {"дрібняк": "i32", "крупняк": "i64", "базар": "bool"}
+# The four values of може and вийде, with their canonical AST names.
+VARIANTS = {"шось": "some", "нема": "none", "вийшло": "ok", "облом": "err"}
 
 # Latin letters resembling Cyrillic can hide a substitution, such as
 # тіпa with a final Latin a.
@@ -238,6 +241,7 @@ class Parser:
 
     def parse_type(self):
         # type = "дрібняк" | "крупняк" | "базар" | IDENT | array_type
+        #      | option_type | result_type
         # The node is positioned at the type: the semantic pass reports an
         # unknown structure name there.
         if self.at(IDENT):
@@ -245,9 +249,12 @@ class Parser:
             return NamedTypeNode(token.line, token.column, token.text)
         if self.at(LBRACKET):
             return self.parse_array_type()
+        if self.at_keyword("може", "вийде"):
+            return self.parse_variant_type()
         if not self.at_keyword(*TYPE_NAMES):
-            raise self.error(f"Який тип, шеф? Чекаю «дрібняк», «крупняк», «базар», назву структури "
-                             f"або масив «[тип; розмір]», а тут {describe(self.peek())}.")
+            raise self.error(f"Який тип, шеф? Чекаю «дрібняк», «крупняк», «базар», назву структури, "
+                             f"масив «[тип; розмір]», «може тип» або «вийде тип або облом тип», "
+                             f"а тут {describe(self.peek())}.")
         token = self.eat()
         return NamedTypeNode(token.line, token.column, TYPE_NAMES[token.text])
 
@@ -264,6 +271,22 @@ class Parser:
                               f"чекаю «]», а тут {{found}}.")
         self.leave()
         return ArrayTypeNode(opener.line, opener.column, element, size, size_text)
+
+    def parse_variant_type(self):
+        # option_type = "може", type
+        # result_type = "вийде", type, "або", "облом", type
+        opener = self.eat()
+        self.enter(opener)
+        inner = self.parse_type()
+        if opener.text == "може":
+            node = OptionTypeNode(opener.line, opener.column, inner)
+        else:
+            self.expect_keyword("або", "У «вийде» два типи: після першого чекаю «або облом» і тип облому, "
+                                       "а тут {found}.")
+            self.expect_keyword("облом", "Після «вийде … або» чекаю «облом» і тип облому, а тут {found}.")
+            node = ResultTypeNode(opener.line, opener.column, inner, self.parse_type())
+        self.leave()
+        return node
 
     def parse_assignment(self):
         # "перевзувся", place, "тепер", expression
@@ -706,6 +729,8 @@ class Parser:
             return self.parse_object_creation()
         if token.kind == LBRACKET:
             return self.parse_array_literal()
+        if self.at_keyword(*VARIANTS):
+            return self.parse_variant()
         if token.kind == STRING:
             raise self.error("Рядок у лапках можна тільки базарити: «базарь \"...\"». "
                              "У виразах рядків нема.")
@@ -747,12 +772,32 @@ class Parser:
                 node = self.parse_index(node)
                 continue
             self.eat()
+            if self.at_keyword(*VARIANTS):
+                # з.шось, з.нема, р.вийшло, р.облом: which value a може or вийде holds.
+                check = self.eat()
+                if self.at(LPAREN):
+                    raise self.error(f"«.{check.text}» — перевірка, а не функція: пиши без дужок.")
+                node = FieldAccessNode(check.line, check.column, node, check.text)
+                continue
             member = self.expect_field_name()
             if self.at(LPAREN):
                 node = MemberCallNode(member.line, member.column, node, member.text, self.parse_arguments())
             else:
                 node = FieldAccessNode(member.line, member.column, node, member.text)
         return node
+
+    def parse_variant(self):
+        # variant = "шось", "(", expression, ")" | "нема"
+        #         | "вийшло", "(", expression, ")" | "облом", "(", expression, ")"
+        word = self.eat()
+        if word.text == "нема":
+            return VariantNode(word.line, word.column, "none", None)
+        opener = self.expect(LPAREN, f"Після «{word.text}» чекаю «(» і значення в дужках, а тут {{found}}.")
+        self.enter(opener)
+        value = self.parse_expression()
+        self.expect(RPAREN, f"Дужку з рядка {opener.line}:{opener.column} не закрито: чекаю «)», а тут {{found}}.")
+        self.leave()
+        return VariantNode(word.line, word.column, VARIANTS[word.text], value)
 
     def parse_index(self, node):
         # "[", expression, "]" after a chain: one element of an array

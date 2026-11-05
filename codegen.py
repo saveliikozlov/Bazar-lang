@@ -7,8 +7,9 @@ has .type, names have .ref, calls have .target, field accesses .field_info.
 The only IR text the compiler writes is str(module), printed by llvmlite.
 
 Layout of the module:
-* an identified struct type "bz.T" per structure, fields in field order, and
-  an LLVM array type [N x T] per Bazar array type;
+* an identified struct type "bz.T" per structure, fields in field order, an
+  LLVM array type [N x T] per Bazar array type, {i1, T} per може T, and
+  {i1, T, E} per вийде T або облом E, whose tag is 1 for шось and вийшло;
 * "bz.NAME" per function and "bz.T.NAME" per member function, whose first
   parameter is a pointer to the object; the prefix keeps a function named
   main or printf apart from the C runtime;
@@ -37,11 +38,14 @@ from llvmlite import ir
 import llvmlite.binding as llvm
 
 from ast_nodes import (
-    ArrayFillNode, ArrayLiteralNode, ForEachNode, IndexNode, AssignmentNode, BinaryNode, BooleanNode, BreakNode, CallNode, CallStatementNode, DeclarationNode,
-    ExitNode, FieldAccessNode, FieldAssignmentNode, ForNode, IdentifierNode, IfNode, IntegerNode,
-    MemberCallNode, NewObjectNode, PrintNode, ReadNode, ReturnNode, StringNode, UnaryNode, WhileNode, walk,
+    ArrayFillNode, ArrayLiteralNode, AssignmentNode, BinaryNode, BooleanNode, BreakNode, CallNode,
+    CallStatementNode, DeclarationNode, ExitNode, FieldAccessNode, FieldAssignmentNode, ForEachNode, ForNode,
+    IdentifierNode, IfNode, IndexNode, IntegerNode, MemberCallNode, NewObjectNode, PrintNode, ReadNode,
+    ReturnNode, StringNode, UnaryNode, VariantNode, WhileNode, walk,
 )
-from bazar_types import ArrayType, BoolType, IntType, StructType, is_aggregate, is_scalar
+from bazar_types import (
+    ArrayType, BoolType, IntType, OptionType, StructType, is_aggregate, is_scalar, is_variant, payloads,
+)
 from semantic import FieldInfo, is_name_chain
 
 I1, I8, I32, I64 = ir.IntType(1), ir.IntType(8), ir.IntType(32), ir.IntType(64)
@@ -115,6 +119,8 @@ class CodeGenerator:
             return self.struct_types[t.name]
         if isinstance(t, ArrayType):
             return ir.ArrayType(self.lltype(t.element), t.length)
+        if is_variant(t):
+            return ir.LiteralStructType([I1] + [self.lltype(inner) for inner in payloads(t)])
         raise AssertionError(f"no LLVM type for {t}")
 
     def string(self, text):
@@ -391,6 +397,23 @@ class CodeGenerator:
                 separator = opening + " " if number == 0 else ", "
                 closing = " }" + suffix if number == len(fields) - 1 else ""
                 self.print_value(field_value, field.type, f"{separator}{field.name}: ", closing)
+        elif is_variant(t):
+            # шось(x) or нема; вийшло(x) or облом(e).
+            words = ("шось", "нема") if isinstance(t, OptionType) else ("вийшло", "облом")
+            held_block = self.new_block("print.held")
+            other_block = self.new_block("print.other")
+            end_block = self.new_block("print.end")
+            self.builder.cbranch(self.builder.load(self.element(value, 0)), held_block, other_block)
+            for block, index, word in ((held_block, 1, words[0]), (other_block, 2, words[1])):
+                self.builder.position_at_end(block)
+                if index < len(payloads(t)) + 1:
+                    inner = payloads(t)[index - 1]
+                    self.print_value(self.operand_at(self.element(value, index), inner), inner,
+                                     f"{prefix}{word}(", ")" + suffix)
+                else:
+                    self.builder.call(self.printf, [self.string("%s"), self.string(prefix + word + suffix)])
+                self.builder.branch(end_block)
+            self.builder.position_at_end(end_block)
         elif isinstance(t, ArrayType):
             # [a, b, c]: the first element, then a loop over the rest with ", " before each.
             def show(index, element_prefix, element_suffix):
@@ -430,6 +453,10 @@ class CodeGenerator:
                                 operand, node, "мінус")
         if isinstance(node, BinaryNode):
             return self.binary(node)
+        if isinstance(node, FieldAccessNode) and getattr(node, "variant", None):
+            # з.шось and the others read the tag.
+            tag = self.builder.load(self.element(self.pointer(node.object), 0))
+            return tag if node.variant in ("some", "ok") else self.builder.not_(tag)
         if isinstance(node, FieldAccessNode) and node.field_info is None:
             # розмір of an array is known now; the array still runs if it is more than a name.
             if not is_name_chain(node.object):
@@ -446,6 +473,10 @@ class CodeGenerator:
     def operand(self, node):
         """An SSA value for a scalar expression, a pointer for an object."""
         return self.pointer(node) if is_aggregate(node.type) else self.value(node)
+
+    def operand_at(self, pointer, t):
+        """What is stored at pointer, as operand() gives it: loaded for a scalar."""
+        return pointer if is_aggregate(t) else self.builder.load(pointer)
 
     # ------------------------------------------------------------ objects
 
@@ -494,6 +525,14 @@ class CodeGenerator:
                 self.store_value(self.element(destination, index), item)
         elif isinstance(node, ArrayFillNode):
             self.fill(destination, node)
+        elif isinstance(node, VariantNode):
+            # The tag, then the value in its own place: шось and вийшло at 1, облом at 2.
+            held = node.variant in ("some", "ok")
+            self.builder.store(ir.Constant(I1, int(held)), self.element(destination, 0))
+            if node.value is not None:
+                self.store_value(self.element(destination, 1 if held else 2), node.value)
+        elif isinstance(node, BinaryNode):
+            self.fallback(node, destination)
         else:
             self.copy(destination, self.pointer(node), node.type)
 
@@ -577,10 +616,12 @@ class CodeGenerator:
 
     def binary(self, node):
         operator = node.operator
+        if getattr(node, "fallback", False):
+            return self.fallback(node, None)
         if operator in ("and", "or"):
             return self.short_circuit(node)
         if is_aggregate(node.left.type):
-            return self.array_comparison(node)
+            return self.aggregate_comparison(node)
         left = self.value(node.left)
         right = self.value(node.right)
         if operator in COMPARISONS:
@@ -593,11 +634,44 @@ class CodeGenerator:
             return self.checked(self.builder.smul_with_overflow, left, right, node, "на")
         return self.division(left, right, node)
 
-    def array_comparison(self, node):
-        """рівно and не рівно on arrays: element by element.
+    def fallback(self, node, destination):
+        """з або x: what з holds, or x, which runs only when з holds нема or облом.
 
-        Not memcmp: LLVM leaves the unused bits of a stored базар unspecified.
-        A borrowed left array is a snapshot when the right side may change it."""
+        A scalar result is a phi; an object result is written to destination."""
+        container = self.pointer(node.left)
+        held_block = self.new_block("fallback.held")
+        other_block = self.new_block("fallback.other")
+        end_block = self.new_block("fallback.end")
+        self.builder.cbranch(self.builder.load(self.element(container, 0)), held_block, other_block)
+        self.builder.position_at_end(held_block)
+        held = self.element(container, 1)
+        if destination is None:
+            held = self.builder.load(held)
+        else:
+            self.copy(destination, held, node.type)
+        held_end = self.builder.block
+        self.builder.branch(end_block)
+        self.builder.position_at_end(other_block)
+        if destination is None:
+            other = self.value(node.right)
+        else:
+            self.emit_into(destination, node.right)
+        other_end = self.builder.block
+        self.builder.branch(end_block)
+        self.builder.position_at_end(end_block)
+        if destination is not None:
+            return None
+        result = self.builder.phi(self.lltype(node.type))
+        result.add_incoming(held, held_end)
+        result.add_incoming(other, other_end)
+        return result
+
+    def aggregate_comparison(self, node):
+        """рівно and не рівно on arrays, може, and вийде: part by part.
+
+        Not memcmp: LLVM leaves the unused bits of a stored базар unspecified,
+        and нема holds no value at all. A borrowed left side is a snapshot when
+        the right side may change it."""
         if addressable(node.left) and has_call(node.right):
             left = self.snapshot(node.left)
         else:
@@ -608,6 +682,8 @@ class CodeGenerator:
     def equal(self, left, right, t):
         if is_scalar(t):
             return self.builder.icmp_signed("==", self.builder.load(left), self.builder.load(right))
+        if is_variant(t):
+            return self.equal_variants(left, right, t)
         result = self.alloca(I1)
         self.builder.store(ir.Constant(I1, 1), result)
 
@@ -616,6 +692,29 @@ class CodeGenerator:
                               self.builder.gep(right, [ir.Constant(I32, 0), index]), t.element)
             self.builder.store(self.builder.and_(self.builder.load(result), same), result)
         self.counted_loop(0, t.length, compare)
+        return self.builder.load(result)
+
+    def equal_variants(self, left, right, t):
+        """Equal tags, and then equal values: шось and вийшло at 1, облом at 2; нема holds none."""
+        result = self.alloca(I1)
+        left_tag = self.builder.load(self.element(left, 0))
+        same_tag = self.builder.icmp_signed("==", left_tag, self.builder.load(self.element(right, 0)))
+        self.builder.store(same_tag, result)
+        tag_block = self.new_block("same.tag")
+        held_block = self.new_block("same.held")
+        other_block = self.new_block("same.other")
+        end_block = self.new_block("same.end")
+        self.builder.cbranch(same_tag, tag_block, end_block)
+        self.builder.position_at_end(tag_block)
+        self.builder.cbranch(left_tag, held_block, other_block)
+        for block, index in ((held_block, 1), (other_block, 2)):
+            self.builder.position_at_end(block)
+            if index <= len(payloads(t)):
+                inner = payloads(t)[index - 1]
+                self.builder.store(self.equal(self.element(left, index), self.element(right, index), inner),
+                                   result)
+            self.builder.branch(end_block)
+        self.builder.position_at_end(end_block)
         return self.builder.load(result)
 
     def short_circuit(self, node):

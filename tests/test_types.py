@@ -7,8 +7,8 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from bazar_types import (  # noqa: E402
-    BOOL, BUILTIN_TYPES, I32, I64, STRING, ArrayType, BoolType, IntType, StructType, contained_structs,
-    is_aggregate, is_comparable, is_integer, is_scalar,
+    BOOL, BUILTIN_TYPES, I32, I64, STRING, ArrayType, BoolType, IntType, OptionType, ResultType, StructType,
+    contained_structs, is_aggregate, is_comparable, is_integer, is_scalar, is_variant, payloads,
 )
 
 
@@ -79,6 +79,30 @@ class ArrayTypeTest(unittest.TestCase):
         self.assertTrue(is_comparable(ArrayType(ArrayType(BOOL, 2), 2)))
         self.assertFalse(is_comparable(ArrayType(point, 2)))
         self.assertFalse(is_scalar(ArrayType(I32, 1)))
+
+
+
+class VariantTypeTest(unittest.TestCase):
+    def test_equal_by_structure(self):
+        self.assertEqual(OptionType(I32), OptionType(IntType(32)))
+        self.assertNotEqual(OptionType(I32), OptionType(I64))
+        self.assertEqual(ResultType(I32, I64), ResultType(I32, I64))
+        self.assertNotEqual(ResultType(I32, I64), ResultType(I64, I32))
+
+    def test_spellings(self):
+        nested = ResultType(OptionType(ArrayType(I32, 2)), I64)
+        self.assertEqual(str(nested), "Result<Option<[i32; 2]>, i64>")
+        self.assertEqual(nested.word, "вийде може [дрібняк; 2] або облом крупняк")
+
+    def test_predicates_and_payloads(self):
+        point = StructType("Точка")
+        self.assertTrue(is_variant(OptionType(I32)) and is_aggregate(ResultType(I32, BOOL)))
+        self.assertFalse(is_variant(ArrayType(I32, 1)))
+        self.assertEqual(payloads(OptionType(I32)), [I32])
+        self.assertEqual(payloads(ResultType(I32, BOOL)), [I32, BOOL])
+        self.assertTrue(is_comparable(ResultType(OptionType(BOOL), ArrayType(I64, 2))))
+        self.assertFalse(is_comparable(OptionType(point)))
+        self.assertEqual(contained_structs(ResultType(point, OptionType(StructType("Коло")))), ["Точка", "Коло"])
 
 
 if __name__ == "__main__":

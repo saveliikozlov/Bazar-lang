@@ -15,7 +15,8 @@ in source order directly beneath their parent.
 Stage 2 adds list labels (parameters, fields, methods, arguments): each
 item is printed one level below the label, and an empty list prints as
 label: []. Types print as i32, i64, bool, or the structure name; an array
-type prints as [ELEMENT; SIZE], with its size as written in the source.
+type prints as [ELEMENT; SIZE], with its size as written in the source,
+може T as Option<T>, and вийде T або облом E as Result<T, E>.
 """
 
 from __future__ import annotations
@@ -139,6 +140,25 @@ class ArrayTypeNode(TypeNode):
 
     def __str__(self):
         return f"[{self.element}; {self.size_text}]"
+
+
+@dataclass
+class OptionTypeNode(TypeNode):
+    """може TYPE: a value of TYPE or none."""
+    inner: TypeNode
+
+    def __str__(self):
+        return f"Option<{self.inner}>"
+
+
+@dataclass
+class ResultTypeNode(TypeNode):
+    """вийде TYPE або облом TYPE: a result or an error."""
+    ok: TypeNode
+    error: TypeNode
+
+    def __str__(self):
+        return f"Result<{self.ok}, {self.error}>"
 
 
 # ------------------------------------------------------------- program
@@ -515,6 +535,22 @@ class ArrayFillNode(ExprNode):
 
     def labelled_children(self):
         return (("value", self.value),)
+
+
+@dataclass
+class VariantNode(ExprNode):
+    """шось(EXPR), нема, вийшло(EXPR), or облом(EXPR); variant is some, none, ok, or err.
+
+    value is None for нема. Its type comes from context, except that шось(x)
+    alone is може of the type of x."""
+    variant: str
+    value: ExprNode | None
+
+    def attributes(self):
+        return (("variant", self.variant),)
+
+    def labelled_children(self):
+        return () if self.value is None else (("value", self.value),)
 
 
 @dataclass

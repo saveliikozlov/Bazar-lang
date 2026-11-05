@@ -16,7 +16,7 @@ NEW_KEYWORDS = ("желєзобетонно зуб даю мутна тєма т
                 "всьо розходимось якшо реально а нє отакої гон або і ше рівно не більше "
                 "менше плюс мінус на ділити "
                 "маю дєло виході тримай порішали такі діла склепай ану кажи "
-                "крутимось поки докрутились харе всюди").split()
+                "крутимось поки докрутились харе всюди може вийде шось нема вийшло облом").split()
 
 # Former Russian vocabulary absent from the new keywords is deliberately
 # retained here to verify that these words are now ordinary identifiers.

@@ -6,7 +6,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from bazar_types import BOOL, I32, I64, ArrayType  # noqa: E402
+from bazar_types import BOOL, I32, I64, ArrayType, OptionType, ResultType  # noqa: E402
 from parser import CompilationError, parse_program  # noqa: E402
 from semantic import FieldInfo, analyze  # noqa: E402
 
@@ -132,6 +132,27 @@ class ArrayAnnotationTest(unittest.TestCase):
                            "    базарь е\nдокрутились")
         loop = program.statements[1]
         self.assertEqual((loop.info.type, loop.info.kind), (I32, "counter"))
+
+
+
+class VariantAnnotationTest(unittest.TestCase):
+    def test_values_take_their_type_from_context(self):
+        program, _ = check("зуб даю з тіпа може дрібняк це шось(1)\nзуб даю н тіпа може дрібняк це нема\n"
+                           "зуб даю р тіпа вийде крупняк або облом базар це облом(гон)\nбазарь шось(5)")
+        some, none, error, printed = program.statements
+        self.assertEqual(some.initializer.value.type, I32)          # the literal inside is дрібняк
+        self.assertEqual(none.initializer.type, OptionType(I32))
+        self.assertEqual(error.initializer.type, ResultType(I64, BOOL))
+        self.assertEqual(printed.value.type, OptionType(I64))       # шось alone infers its type
+
+    def test_checks_and_fallback(self):
+        program, _ = check("зуб даю з тіпа може дрібняк це нема\nбазарь з.нема\nбазарь з або 7\n"
+                           "базарь реально або гон")
+        check_node = program.statements[1].value
+        self.assertEqual((check_node.type, check_node.variant, check_node.field_info), (BOOL, "none", None))
+        fallback = program.statements[2].value
+        self.assertEqual((fallback.fallback, fallback.type, fallback.right.type), (True, I32, I32))
+        self.assertFalse(program.statements[3].value.fallback)      # або on базар stays logical OR
 
 
 if __name__ == "__main__":

@@ -8,11 +8,14 @@ be dictionary keys:
 * BoolType(): базар;
 * StructType(name): an object of a такі діла structure;
 * ArrayType(element, length): a fixed-size array, [дрібняк; 5];
+* OptionType(inner): може дрібняк, a value шось(x) or нема;
+* ResultType(ok, error): вийде дрібняк або облом крупняк, a value вийшло(x)
+  or облом(e);
 * StringType(): a string literal, the operand of базарь; it cannot be written
   as a type.
 
-str(type) is the spelling of the AST dump (i32, i64, bool, or the structure
-name), and type.word is the spelling of error messages (дрібняк, крупняк,
+str(type) is the spelling of the AST dump (i32, i64, bool, the structure
+name, [i32; 5], Option<i32>, Result<i32, i64>), and type.word is the spelling of error messages (дрібняк, крупняк,
 базар, or the structure name).
 
 Every compound type that is added later needs its own class here, a case in
@@ -87,6 +90,31 @@ class ArrayType(Type):
 
 
 @dataclass(frozen=True)
+class OptionType(Type):
+    inner: Type
+
+    def __str__(self):
+        return f"Option<{self.inner}>"
+
+    @property
+    def word(self):
+        return f"може {self.inner.word}"
+
+
+@dataclass(frozen=True)
+class ResultType(Type):
+    ok: Type
+    error: Type
+
+    def __str__(self):
+        return f"Result<{self.ok}, {self.error}>"
+
+    @property
+    def word(self):
+        return f"вийде {self.ok.word} або облом {self.error.word}"
+
+
+@dataclass(frozen=True)
 class StringType(Type):
     def __str__(self):
         return "string"
@@ -117,14 +145,28 @@ def is_scalar(t):
 
 
 def is_aggregate(t):
-    """A type whose values live in memory and are copied as a block: a structure or an array."""
-    return isinstance(t, (StructType, ArrayType))
+    """A type whose values live in memory and are copied as a block: all but the scalars."""
+    return isinstance(t, (StructType, ArrayType, OptionType, ResultType))
+
+
+def is_variant(t):
+    """може or вийде: a tag and the value it holds."""
+    return isinstance(t, (OptionType, ResultType))
+
+
+def payloads(t):
+    """The types a може or вийде value may hold, in their order in memory after the tag."""
+    if isinstance(t, OptionType):
+        return [t.inner]
+    return [t.ok, t.error]
 
 
 def is_comparable(t):
     """A type whose values рівно and не рівно compare: a scalar or an array of comparable elements."""
     if isinstance(t, ArrayType):
         return is_comparable(t.element)
+    if is_variant(t):
+        return all(is_comparable(inner) for inner in payloads(t))
     return is_scalar(t)
 
 
@@ -134,4 +176,6 @@ def contained_structs(t):
         return [t.name]
     if isinstance(t, ArrayType):
         return contained_structs(t.element)
+    if is_variant(t):
+        return [name for inner in payloads(t) for name in contained_structs(inner)]
     return []

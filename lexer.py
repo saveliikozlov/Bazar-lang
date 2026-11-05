@@ -48,6 +48,7 @@ KEYWORDS = frozenset((
     "такі", "діла", "склепай", "ану", "кажи",
     "крутимось", "поки", "докрутились", "харе",
     "всюди",
+    "може", "вийде", "шось", "нема", "вийшло", "облом",
 ))
 # Overflow check, first layer: no integer type is wider than крупняк (i64).
 # The largest literal is the magnitude of i64's minimum, 2**63, which is only

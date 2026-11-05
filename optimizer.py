@@ -21,10 +21,10 @@ reports the same position.
 """
 
 from ast_nodes import (
-    ArrayFillNode, ArrayLiteralNode, ForEachNode, IndexNode, AssignmentNode, ASTNode, BinaryNode, BlockNode, BooleanNode, CallNode, CallStatementNode,
-    DeclarationNode, ExitNode, FieldAccessNode, FieldAssignmentNode, ForNode, FunctionNode,
-    IdentifierNode, IfNode, IntegerNode, MemberCallNode, NewObjectNode, PrintNode, ReturnNode,
-    StructureNode, UnaryNode, WhileNode, walk,
+    ArrayFillNode, ArrayLiteralNode, AssignmentNode, ASTNode, BinaryNode, BlockNode, BooleanNode, CallNode,
+    CallStatementNode, DeclarationNode, ExitNode, FieldAccessNode, FieldAssignmentNode, ForEachNode, ForNode,
+    FunctionNode, IdentifierNode, IfNode, IndexNode, IntegerNode, MemberCallNode, NewObjectNode, PrintNode,
+    ReturnNode, StructureNode, UnaryNode, VariantNode, WhileNode, walk,
 )
 from semantic import VarInfo, constant_value
 
@@ -120,6 +120,8 @@ def can_drop(node):
         return all(can_drop(item) for item in node.elements)
     if isinstance(node, ArrayFillNode):
         return can_drop(node.value)
+    if isinstance(node, VariantNode):
+        return node.value is None or can_drop(node.value)
     if isinstance(node, BinaryNode) and node.operator not in ARITHMETIC:
         return can_drop(node.left) and can_drop(node.right)
     if isinstance(node, (UnaryNode, BinaryNode)):
@@ -248,6 +250,8 @@ def evaluated_parts(node):
         return node.elements
     if isinstance(node, ArrayFillNode):
         return [node.value]
+    if isinstance(node, VariantNode):
+        return [] if node.value is None else [node.value]
     return []
 
 
