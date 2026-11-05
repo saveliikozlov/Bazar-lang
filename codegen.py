@@ -18,7 +18,9 @@ Layout of the module:
   against the C library, and llvm.memcpy once an object is copied;
 * format strings and string literals as private global constants.
 
-Every variable lives in an alloca of its function's entry block. A scalar
+Every variable lives in a slot made in its function's entry block: an alloca,
+or, for a value of HEAP_THRESHOLD bytes or more, memory from bazar.alloc
+that is freed before every ret, so large arrays never exhaust the stack. A scalar
 (integer or базар) is an SSA value. An object (an aggregate) is never loaded
 or stored as a whole, because LLVM compiles large aggregate values in
 superlinear time: it stays in memory, and its value is copied with
@@ -59,6 +61,8 @@ INT_FORMATS = {32: "%d", 64: "%lld"}     # IntType.bits -> printf and scanf form
 COMPARISONS = {"eq": "==", "ne": "!=", "gt": ">", "lt": "<"}
 OVERFLOW_WORDS = {"add": "плюс", "sub": "мінус", "mul": "на"}
 EXIT_MESSAGE = "Всьо, розходимось: %lld\n"
+HEAP_THRESHOLD = 1024                    # bytes: a slot this large lives on the heap
+OUT_OF_MEMORY = "помилка виконання: не вистачило пам'яті на масив чи об'єкт\n"
 
 
 class CodeGenerator:
@@ -70,6 +74,8 @@ class CodeGenerator:
         self.struct_types = {}
         self.functions = {}                  # FunctionInfo -> ir.Function
         self.memcpy_function = None          # declared on the first copy of an object
+        self.runtime = {}                    # name -> C function declared on first use
+        self.alloc_function = None           # bazar.alloc, defined on the first heap slot
         self.declare_runtime()
         self.declare_structures()
         self.declare_functions()
@@ -139,6 +145,39 @@ class CodeGenerator:
             self.strings[text] = constant
         return self.strings[text].gep([ir.Constant(I32, 0), ir.Constant(I32, 0)])
 
+    def c_function(self, name, result, parameters):
+        """A C library function, declared the first time it is used."""
+        if name not in self.runtime:
+            self.runtime[name] = ir.Function(self.module, ir.FunctionType(result, parameters), name=name)
+        return self.runtime[name]
+
+    def flush(self, builder):
+        """fflush(NULL): what printf holds back reaches stdout before anything goes to stderr."""
+        builder.call(self.c_function("fflush", I32, [I8_PTR]), [ir.Constant(I8_PTR, None)])
+
+    def allocator(self):
+        """bazar.alloc(size): malloc, or a run-time error when memory runs out.
+
+        The name has no "bz." prefix, so no Bazar function can take it."""
+        if self.alloc_function is None:
+            function = ir.Function(self.module, ir.FunctionType(I8_PTR, [I64]), name="bazar.alloc")
+            function.linkage = "internal"
+            builder = ir.IRBuilder(function.append_basic_block("entry"))
+            memory = builder.call(self.c_function("malloc", I8_PTR, [I64]), [function.args[0]])
+            failed = function.append_basic_block("failed")
+            done = function.append_basic_block("done")
+            builder.cbranch(builder.icmp_unsigned("==", memory, ir.Constant(I8_PTR, None)), failed, done)
+            builder.position_at_end(failed)
+            self.flush(builder)
+            builder.call(self.write, [ir.Constant(I32, 2), self.string(OUT_OF_MEMORY),
+                                      ir.Constant(I64, len(OUT_OF_MEMORY.encode("utf-8")))])
+            builder.call(self.exit, [ir.Constant(I32, 1)])
+            builder.unreachable()
+            builder.position_at_end(done)
+            builder.ret(memory)
+            self.alloc_function = function
+        return self.alloc_function
+
     def memcpy(self):
         if self.memcpy_function is None:
             self.memcpy_function = self.module.declare_intrinsic("llvm.memcpy", [I8_PTR, I8_PTR, I64])
@@ -163,14 +202,31 @@ class CodeGenerator:
         self.slots = {}                      # VarInfo -> alloca
         self.loop_ends = []                  # exit block of each enclosing loop, innermost last
         self.self_pointer = None
+        self.heap = []                       # memory of the large slots, freed before every ret
         self.result_pointer = None           # where тримай writes an object result
         self.structure = None
 
     def finish_function(self):
+        # Every way out of the function frees its large slots: тримай, ?, and the end.
+        if self.heap:
+            free = self.c_function("free", ir.VoidType(), [I8_PTR])
+            for block in self.function.blocks:
+                if isinstance(block.terminator, ir.Ret):      # ret and ret void alike
+                    builder = ir.IRBuilder(block)
+                    builder.position_before(block.terminator)
+                    for memory in self.heap:
+                        builder.call(free, [memory])
         ir.IRBuilder(self.entry).branch(self.function.blocks[1])
 
     def alloca(self, llvm_type, name=""):
-        return ir.IRBuilder(self.entry).alloca(llvm_type, name=name)
+        """A slot in the entry block: on the stack, or on the heap when it is large."""
+        builder = ir.IRBuilder(self.entry)
+        if byte_size(llvm_type) < HEAP_THRESHOLD:
+            return builder.alloca(llvm_type, name=name)
+        size = ir.Constant(llvm_type.as_pointer(), None).gep([ir.Constant(I32, 1)]).ptrtoint(I64)
+        memory = builder.call(self.allocator(), [size])
+        self.heap.append(memory)
+        return builder.bitcast(memory, llvm_type.as_pointer(), name=name)
 
     def generate_body(self, function, llvm_function, structure):
         self.begin_function(llvm_function)
@@ -884,6 +940,7 @@ class CodeGenerator:
     def stop(self, node, message):
         """Write one run-time error line for node to stderr and exit with 1; ends the block."""
         text = f"помилка виконання: line {node.line}:{node.column}: {message}\n"
+        self.flush(self.builder)
         self.builder.call(self.write, [ir.Constant(I32, 2), self.string(text),
                                        ir.Constant(I64, len(text.encode("utf-8")))])
         self.builder.call(self.exit, [ir.Constant(I32, 1)])
@@ -895,6 +952,17 @@ class CodeGenerator:
         if isinstance(info, FieldInfo):          # a field of the own object, inside a member function
             return self.element(self.self_pointer, info.index, info.name)
         return self.slots[info]
+
+
+def byte_size(llvm_type):
+    """About how many bytes a value of llvm_type takes, padding aside: enough to pick its slot."""
+    if isinstance(llvm_type, ir.IntType):
+        return max(1, (llvm_type.width + 7) // 8)
+    if isinstance(llvm_type, ir.ArrayType):
+        return llvm_type.count * byte_size(llvm_type.element)
+    if isinstance(llvm_type, (ir.LiteralStructType, ir.IdentifiedStructType)):
+        return sum(byte_size(element) for element in llvm_type.elements)
+    return 8
 
 
 def literal(text):
