@@ -1,4 +1,4 @@
-# Bazar («Базар») — language specification, version 0.6
+# Bazar («Базар») — language specification, version 0.7
 
 Bazar is a small imperative language whose keywords are Ukrainian/surzhyk
 phrases. Its motto means: *Bazar is a language where you answer for your words.*
@@ -9,8 +9,9 @@ This document describes the lexer, parser, AST, and semantics. Version 0.3
 (Stage 2) adds functions, structures, member functions, `ану кажи`, string
 printing, and the auto constructor; the semantic pass enforces every rule,
 and the compiler generates LLVM IR. Version 0.4 adds fixed-size arrays, and
-version 0.5 the `може` (option) and `вийде` (result) types, and version 0.6
-pattern matching with `розбери`. The full numbered rule list is in
+version 0.5 the `може` (option) and `вийде` (result) types, version 0.6
+pattern matching with `розбери`, and version 0.7 the `?` operator. The full
+numbered rule list is in
 [README.md](README.md#semantic-rules). The authoritative
 syntax is [grammar.ebnf](grammar.ebnf). Programs are in [examples/](examples)
 and explained in [EXAMPLES.md](EXAMPLES.md).
@@ -38,7 +39,7 @@ Each statement occupies one physical line. `якшо реально`, `маю д
 | `перевзувся NAME.FIELD… тепер EXPR` | assignment to a field through a mutable chain | `o.f = e` |
 | `перевзувся NAME[I]… тепер EXPR` | assignment to an array element through a mutable chain | `a[i] = e` |
 | `тримай EXPR` | leave the function with a value; literally here, hold it | `return e` |
-| `NAME(ARGS)`, `OBJ.NAME(ARGS)`, `ARR[I].NAME(ARGS)` | a call on its own line | `f(a)`, `o.m(a)`, `a[i].m(b)` |
+| `NAME(ARGS)`, `OBJ.NAME(ARGS)`, `ARR[I].NAME(ARGS)`, `NAME(ARGS)?` | a call on its own line, optionally passing on `нема` or `облом` | `f(a)`, `o.m(a)`, `a[i].m(b)`, `f(a)?` |
 | `маю дєло NAME(P тіпа T, …) на виході T` … `порішали` | function, top level; literally I have a business | `fn name(p: T) -> T { … }` |
 | `такі діла NAME` … `порішали` | structure with fields and member functions, top level | `struct Name { … }` |
 
@@ -47,7 +48,8 @@ object creation `склепай T(a, b)`, and `ану кажи`, which reads one
 Arrays add literals `[a, b, c]`, filled arrays `[всюди x]` (literally
 everywhere), elements `м[і]`, and the length `м.розмір`. `може` and `вийде`
 add their values `шось(x)`, `нема`, `вийшло(x)`, and `облом(e)`, the checks
-`з.шось`, `з.нема`, `р.вийшло`, and `р.облом`, and the fallback `з або x`.
+`з.шось`, `з.нема`, `р.вийшло`, and `р.облом`, the fallback `з або x`, and
+`з?`, which is the value held, or returns `нема` or `облом` from the function.
 `базарь` also prints a string literal `"…"`, an object, an array, and those
 values.
 
@@ -103,7 +105,7 @@ Operators are listed from **highest** to lowest precedence:
 
 | Level | Operators | Canonical operator | Associativity |
 | --- | --- | --- | --- |
-| 1 | literals, names, `( … )`, arrays `[…]`, `.` fields and calls, `м[і]` elements | | |
+| 1 | literals, names, `( … )`, arrays `[…]`, `.` fields and calls, `м[і]` elements, `з?` | | |
 | 2 | `мінус x` (unary minus) | `neg` | right: `мінус мінус x` = `-(-x)` |
 | 3 | `на` (×), `ділити на` (÷) | `mul`, `div` | left |
 | 4 | `плюс` (+), `мінус` (−) | `add`, `sub` | left |
@@ -167,7 +169,7 @@ Operators are listed from **highest** to lowest precedence:
   including emoji. `чутки :` and bare `чутки` are errors. In `xчутки:`, the word
   is `xчутки`, so `:` is unexpected. A comment's ending newline still produces
   a NEWLINE token.
-- **Punctuation** is `(`, `)`, `[`, `]`, `,`, `.`, and `;`. All other
+- **Punctuation** is `(`, `)`, `[`, `]`, `,`, `.`, `;`, and `?`. All other
   punctuation outside comments and string literals produces a lexical error.
   A string literal `"…"` may appear only as the operand of `базарь`.
 
@@ -281,6 +283,7 @@ ASTNode(line, column)
     ├── ArrayLiteralNode(elements)
     ├── ArrayFillNode(value)               [всюди value]
     ├── VariantNode(variant, value)        some none ok err; value None for нема
+    ├── TryNode(operand)                   operand?, positioned at ?
     ├── UnaryNode(operator, operand)       operator = neg
     └── BinaryNode(operator, left, right)  add sub mul div eq ne gt lt and or
 ```

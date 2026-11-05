@@ -388,3 +388,47 @@ Common errors, each reported when compiling:
 
 A name in a pattern binds a new variable, even when a constant has that
 name, so `випадок МАКС` matches every value and `випадок _` never runs.
+
+## The ? operator — [examples/try.bazar](examples/try.bazar)
+
+Work out the change at a stall, where the price may be wrong and the money
+may be short:
+
+```text
+маю дєло здача(сплачено тіпа крупняк, ціна тіпа крупняк) на виході вийде крупняк або облом дрібняк
+    якшо реально сплачено менше перевірена(ціна)?
+        тримай облом(2)
+    отакої
+    тримай вийшло(сплачено мінус ціна)
+порішали
+```
+
+`перевірена(ціна)?` gives the price, or returns its `облом(1)` from `здача`
+before the comparison runs. The program sorts out the result with `розбери`
+and then ends with `всьо розходимось здача(гроші, ціна)?`. With input
+`100 30` it prints `70` and `Всьо, розходимось: 70`. With input `20 30` it
+prints `Грошей не вистачає`; then `?` in the main program gets `облом(2)` and
+stops the program with exit code 1, writing to stderr:
+
+```text
+помилка виконання: line 26:65: «?» отримав «облом» замість «вийшло»
+```
+
+Common errors, each reported when compiling:
+
+```text
+маю дєло ф(з тіпа може дрібняк) на виході дрібняк
+    тримай з?
+порішали
+```
+
+On `нема`, `з?` would return `нема` from `ф`, but `ф` returns a `дрібняк`.
+Use `з або 0`, or make `ф` return `може дрібняк`.
+
+```text
+маю дєло ф(р тіпа вийде дрібняк або облом дрібняк) на виході вийде дрібняк або облом крупняк
+    тримай вийшло(р?)
+порішали
+```
+
+The error types differ, `дрібняк` and `крупняк`, and `?` converts none.

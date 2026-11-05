@@ -11,7 +11,9 @@ start with `маю дєло`, structures with `такі діла`, and both end 
 with `[всюди 0]`. `може дрібняк` holds `шось(5)` or `нема`, and
 `вийде дрібняк або облом крупняк` holds `вийшло(5)` or `облом(404)`.
 `розбери` matches a value against patterns, and the compiler checks that
-its `випадок` arms cover every value. Source files use `.bazar`.
+its `випадок` arms cover every value. `з?` takes the value out of a `може` or
+a `вийде`, or returns `нема` or `облом` from the function. Source files use
+`.bazar`.
 
 The compiler reads UTF-8 source, checks lexical and syntactic structure,
 runs a semantic pass over the AST, and generates LLVM IR through the
@@ -511,6 +513,45 @@ part of a pattern is a load and a comparison that jumps to the next arm when
 it fails, and a name is a copy into its own alloca. After the last arm comes
 `unreachable`, because some arm always matches.
 
+## Extra feature: the ? operator
+
+`з?` is the value that `шось` or `вийшло` holds. When `з` holds `нема` or
+`облом`, the function returns that value at once, so a chain of steps that
+may fail reads like a chain that cannot:
+
+```text
+маю дєло ділення(а1 тіпа дрібняк, б1 тіпа дрібняк) на виході вийде дрібняк або облом крупняк
+    якшо реально б1 рівно 0
+        тримай облом(404)
+    отакої
+    тримай вийшло(а1 ділити на б1)
+порішали
+маю дєло середнє(а1 тіпа дрібняк, б1 тіпа дрібняк, д тіпа дрібняк) на виході вийде дрібняк або облом крупняк
+    зуб даю сума тіпа дрібняк це ділення(а1, д)? плюс ділення(б1, д)?
+    тримай вийшло(сума)
+порішали
+базарь середнє(10, 20, 2)
+базарь середнє(10, 20, 0)
+```
+
+This prints `вийшло(15)` and `облом(404)`. `?` on a `може` needs a function
+that returns a `може`; on a `вийде … або облом E` it needs one that returns a
+`вийде` with the same error type E, because no error is converted. `?` binds
+more tightly than any operator and is a step of a chain, so
+`м.перша()?.ціна`, `з?[0]`, and `з??` work, and a call that ends in `?`, such
+as `запиши(х)?`, may stand on its own line. In the main program there is no
+function to return from, so `нема` or `облом` stops the program like an
+overflow:
+
+```text
+помилка виконання: line 13:34: «?» отримав «облом» замість «вийшло»
+```
+
+for `базарь ділення(1, 0)?` on line 13. In the IR, `?` is a branch on the
+tag: one side goes on with the value, and the other writes `нема`, or `облом`
+with its error, to the caller's result and returns. See
+[examples/try.bazar](examples/try.bazar).
+
 ## Semantic rules
 
 The semantic pass ([semantic.py](semantic.py)) runs on the AST before code
@@ -786,6 +827,22 @@ that follows it and one in `tests/invalid` that breaks it (named in brackets).
     `match_structure_wrong_type`, `match_binding_in_alternatives`,
     `match_binding_twice`, `match_function_missing_return`].
 
+**?**
+
+47. `з?` needs a `може` or a `вийде` and is what `шось` or `вийшло` holds. In a
+    function, `?` on a `може` needs the function to return a `може`, and `?` on
+    `вийде T або облом E` needs it to return a `вийде` whose error type is
+    exactly E; `нема` or `облом` returns from the function at once, skipping
+    the rest of the expression. In the main program they stop it with a
+    run-time error and exit code 1. `?` is not allowed in a constant, and a
+    function that contains `?` is never inlined [`try_basics`,
+    `try_in_main_stops`, `try_not_inlined` / `try_on_integer`,
+    `try_on_none_without_type`, `try_option_in_integer_function`,
+    `try_option_in_result_function`, `try_result_in_option_function`,
+    `try_result_error_types_differ`, `try_in_method_with_integer_result`,
+    `try_payload_wrong_type`, `try_alone_is_not_a_statement`,
+    `try_in_constant`, `try_in_assignment_place`].
+
 ## Code generation
 
 [codegen.py](codegen.py) builds the module with `llvmlite.ir`; the only IR
@@ -798,6 +855,8 @@ text the compiler writes is `str(module)`.
   `llvm.memcpy`; see [Arrays and objects in the IR](#arrays-and-objects-in-the-ir).
   `може T` is the literal struct `{i1, T}` and `вийде T або облом E` is
   `{i1, T, E}`; `з або x` is a branch on the tag and a `phi`.
+- **?** is a branch on the tag that returns `нема` or `облом` through the
+  caller's result pointer, or stops the main program.
 - **розбери** tries its arms in order with a chain of comparisons; see
   [Extra feature: розбери](#extra-feature-розбери).
 - **Functions**: `bz.NAME` per function and `bz.Точка.NAME` per member
@@ -856,6 +915,7 @@ The function is then removed as unused.
 | a recursive function, directly or through others | its body would contain its own call |
 | a member function | its body uses the fields of its object |
 | a `тримай` anywhere but the last line, such as inside `якшо` or a loop | it would need a jump out of the middle of the caller |
+| a `?` anywhere in the body | it returns from the function, and in the caller it would return from the caller |
 | a call in the condition of `крутимось поки` | the condition runs on every pass, the moved body only once |
 | a call on the right of `і ше` or `або` | it may never run |
 | a call after something that is not a plain value, as in `ф() плюс г()` for `г` | the moved body would run first and change the order of effects |
@@ -1012,17 +1072,17 @@ exits nonzero if any did:
 
 | Folder | Count | Check |
 | --- | --- | --- |
-| `tests/valid` | 54 | `--ast` output equals `NAME.ast` (front-end tests; some Stage 1 ones use undeclared names on purpose); with `--optimize`, it equals `NAME.optimized.ast` when the optimizer changes the tree, or `NAME.optimized.err` for the 16 that stop in the semantic pass |
-| `tests/invalid` | 326 | compiling exits 1, prints exactly `NAME.err`, and writes no file |
-| `tests/run` | 41 | end to end: compiled, run with `lli` (or built with `llc` and `clang`), stdout equals `NAME.expected`; `NAME.in` is stdin; `NAME.error` is the expected run-time error |
-| `examples` | 13 | compiling succeeds |
+| `tests/valid` | 55 | `--ast` output equals `NAME.ast` (front-end tests; some Stage 1 ones use undeclared names on purpose); with `--optimize`, it equals `NAME.optimized.ast` when the optimizer changes the tree, or `NAME.optimized.err` for the 16 that stop in the semantic pass |
+| `tests/invalid` | 337 | compiling exits 1, prints exactly `NAME.err`, and writes no file |
+| `tests/run` | 43 | end to end: compiled, run with `lli` (or built with `llc` and `clang`), stdout equals `NAME.expected`; `NAME.in` is stdin; `NAME.error` is the expected run-time error |
+| `examples` | 14 | compiling succeeds |
 | `programs` | 3 sessions | built with `llc` and `clang`; the native binary's stdout equals the session's `.expected` |
-| `tests/optimize` | 12 | `--optimize --ast` output equals `NAME.ast`, and stdout equals `NAME.expected` with and without the flag; `NAME.in` and `NAME.error` as in `tests/run` |
+| `tests/optimize` | 13 | `--optimize --ast` output equals `NAME.ast`, and stdout equals `NAME.expected` with and without the flag; `NAME.in` and `NAME.error` as in `tests/run` |
 
-The `tests/valid`, `tests/invalid`, `tests/run`, `examples`, and `programs` checks each run twice, without the flag and with `--optimize`. In `tests/valid`, 27 trees are unchanged by the optimizer and still equal `NAME.ast`; 11 change (unused declarations and functions removed, `покажи` inlined), and their trees are in `NAME.optimized.ast`; 16 deliberately use undeclared names, so they stop in the semantic pass before the optimizer and print the same error as without the flag, pinned in `NAME.optimized.err`.
+The `tests/valid`, `tests/invalid`, `tests/run`, `examples`, and `programs` checks each run twice, without the flag and with `--optimize`. In `tests/valid`, 28 trees are unchanged by the optimizer and still equal `NAME.ast`; 11 change (unused declarations and functions removed, `покажи` inlined), and their trees are in `NAME.optimized.ast`; 16 deliberately use undeclared names, so they stop in the semantic pass before the optimizer and print the same error as without the flag, pinned in `NAME.optimized.err`.
 
 LLVM tools are looked up in `$LLVM_BIN`, then on `PATH`, then in the
-Homebrew folders. The 130 unit tests cover the lexer, the parser, the type
+Homebrew folders. The 131 unit tests cover the lexer, the parser, the type
 values, the exhaustiveness algorithm, the semantic pass's symbol table and annotations, and the CLI.
 
 ## VS Code extension
