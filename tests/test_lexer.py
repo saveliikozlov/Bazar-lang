@@ -14,7 +14,8 @@ from lexer import (  # noqa: E402
 NEW_KEYWORDS = ("желєзобетонно зуб даю мутна тєма тіпа це дрібняк крупняк базар перевзувся тепер базарь "
                 "всьо розходимось якшо реально а нє отакої гон або і ше рівно не більше "
                 "менше плюс мінус на ділити "
-                "маю дєло виході тримай порішали такі діла склепай ану кажи").split()
+                "маю дєло виході тримай порішали такі діла склепай ану кажи "
+                "крутимось поки докрутились харе").split()
 
 # Former Russian vocabulary absent from the new keywords is deliberately
 # retained here to verify that these words are now ordinary identifiers.

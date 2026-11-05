@@ -193,6 +193,37 @@ class IfNode(StmtNode):
 
 
 @dataclass
+class WhileNode(StmtNode):
+    """Loop syntax: крутимось поки EXPR ... докрутились."""
+    condition: ExprNode
+    body: BlockNode
+
+    def labelled_children(self):
+        return (("condition", self.condition), ("body", self.body))
+
+
+@dataclass
+class ForNode(StmtNode):
+    """Range loop syntax: крутимось NAME тіпа TYPE від EXPR по EXPR ... докрутились."""
+    name: str
+    declared_type: str
+    start: ExprNode
+    end: ExprNode
+    body: BlockNode
+
+    def attributes(self):
+        return (("name", self.name), ("type", self.declared_type))
+
+    def labelled_children(self):
+        return (("start", self.start), ("end", self.end), ("body", self.body))
+
+
+@dataclass
+class BreakNode(StmtNode):
+    """Leave the innermost loop: харе."""
+
+
+@dataclass
 class PrintNode(StmtNode):
     """Output syntax: базарь EXPR."""
     value: ExprNode
