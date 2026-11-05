@@ -7,7 +7,8 @@ functions, top-level functions, constants, and scoped variables), checks
 every rule of README "Semantic rules", and annotates the AST for code
 generation:
 
-* every expression node gets .type: "i32", "i64", "bool", or a structure name;
+* every expression node gets .type: a bazar_types.Type (I32, I64, BOOL, or a
+  StructType); a string literal printed by базарь gets STRING;
 * IdentifierNode.ref, AssignmentNode.ref, DeclarationNode.info: a VarInfo
   or, inside a member function, a FieldInfo;
 * CallNode.target / MemberCallNode.target: a FunctionInfo, and
@@ -30,22 +31,20 @@ from ast_nodes import (
     FunctionNode, IdentifierNode, IfNode, IntegerNode, MemberCallNode, NewObjectNode, PrintNode,
     ReadNode, ReturnNode, StringNode, StructureNode, UnaryNode, WhileNode,
 )
+from bazar_types import (
+    BOOL, BUILTIN_TYPES, I64, STRING, StructType, Type, contained_structs, is_comparable, is_integer, is_scalar,
+)
 from parser import CompilationError
 
-I32, I64, BOOL = "i32", "i64", "bool"
-INTEGER_TYPES = (I32, I64)
-BUILTIN_TYPES = (I32, I64, BOOL)
-RANGES = {I32: (-2**31, 2**31 - 1), I64: (-2**63, 2**63 - 1)}
-TYPE_WORDS = {I32: "дрібняк", I64: "крупняк", BOOL: "базар"}
 ARITHMETIC = ("add", "sub", "mul", "div")
 ORDERING = ("gt", "lt")
 EQUALITY = ("eq", "ne")
 LOGIC = ("and", "or")
 
 
-def word(type_name):
+def word(t):
     """A type as the programmer writes it."""
-    return TYPE_WORDS.get(type_name, type_name)
+    return t.word
 
 
 # ------------------------------------------------------------ symbol table
@@ -56,7 +55,7 @@ class VarInfo:
 
     kind: const, immutable, mutable, param, counter."""
     name: str
-    type: str
+    type: Type
     kind: str
     value: object = None             # constants only: int or bool
 
@@ -64,7 +63,7 @@ class VarInfo:
 @dataclass(eq=False)
 class FieldInfo:
     name: str
-    type: str
+    type: Type
     mutable: bool
     index: int
     node: object = None
@@ -76,7 +75,7 @@ class FieldInfo:
 class FunctionInfo:
     name: str
     parameters: list[VarInfo]
-    result: str
+    result: Type
     node: FunctionNode
     owner: StructInfo | None = None  # the structure of a member function
     mutating: bool = False           # assigns a field of its own object (rule 23)
@@ -247,9 +246,9 @@ class Analyzer:
         for field_node in node.fields:
             if field_node.name in structure.fields:
                 raise error(field_node, f"Поле «{field_node.name}» в «{node.name}» вже є.")
-            self.require_type(field_node.declared_type, field_node)
+            field_type = self.resolve_type(field_node.declared_type, field_node)
             structure.fields[field_node.name] = FieldInfo(
-                field_node.name, field_node.declared_type, field_node.mutable, field_node.index, field_node)
+                field_node.name, field_type, field_node.mutable, field_node.index, field_node)
         for method in node.methods:
             if method.name in structure.methods:
                 raise error(method, f"Функція «{method.name}» в «{node.name}» вже є.")
@@ -263,15 +262,19 @@ class Analyzer:
         for parameter in node.parameters:
             if any(p.name == parameter.name for p in parameters):
                 raise error(parameter, f"Параметр «{parameter.name}» вже є в «{node.name}».")
-            self.require_type(parameter.declared_type, parameter)
-            parameters.append(VarInfo(parameter.name, parameter.declared_type, "param"))
-        self.require_type(node.result_type, node)
-        return FunctionInfo(node.name, parameters, node.result_type, node, owner)
+            parameter_type = self.resolve_type(parameter.declared_type, parameter)
+            parameters.append(VarInfo(parameter.name, parameter_type, "param"))
+        result = self.resolve_type(node.result_type, node)
+        return FunctionInfo(node.name, parameters, result, node, owner)
 
-    def require_type(self, type_name, node):
-        if type_name not in BUILTIN_TYPES and type_name not in self.structures:
-            raise error(node.type_at, f"Шо за тип «{type_name}»? Такої структури нема, а з вбудованих є "
-                              f"«дрібняк», «крупняк» і «базар».")
+    def resolve_type(self, type_name, node):
+        """The Type that a declaration of node names; an unknown name is an error at its type."""
+        if type_name in BUILTIN_TYPES:
+            return BUILTIN_TYPES[type_name]
+        if type_name in self.structures:
+            return StructType(type_name)
+        raise error(node.type_at, f"Шо за тип «{type_name}»? Такої структури нема, а з вбудованих є "
+                                  f"«дрібняк», «крупняк» і «базар».")
 
     def check_structure_cycles(self, structures):
         # Rule 16: an object cannot contain itself, directly or through fields.
@@ -280,8 +283,8 @@ class Analyzer:
         def visit(structure):
             state[structure.name] = "visiting"
             for info in structure.fields.values():
-                if info.type in self.structures:
-                    inner = self.structures[info.type]
+                for name in contained_structs(info.type):
+                    inner = self.structures[name]
                     if state.get(inner.name) == "visiting":
                         node = next(f for f in structure.node.fields if f.name == info.name)
                         raise error(node, f"Структура «{inner.name}» містить сама себе через поле "
@@ -305,7 +308,7 @@ class Analyzer:
             node = info.node
             if node.default is None:
                 continue
-            if info.type not in BUILTIN_TYPES:
+            if not is_scalar(info.type):
                 raise error(node.default, f"Поле «{info.name}» — об'єкт «{info.type}», йому «це» не пишуть: "
                                           f"воно склепається саме, якщо всі поля «{info.type}» мають «це».")
             context = Context(None, constants, const_only=True)
@@ -321,8 +324,8 @@ class Analyzer:
             changed = False
             for structure in self.structures.values():
                 for info in structure.fields.values():
-                    if not info.has_default and info.type in self.structures and all(
-                            f.has_default for f in self.structures[info.type].fields.values()):
+                    if not info.has_default and isinstance(info.type, StructType) and all(
+                            f.has_default for f in self.structures[info.type.name].fields.values()):
                         info.has_default = changed = True
 
     # ----------------------------------------------------------- constants
@@ -330,13 +333,13 @@ class Analyzer:
     def declare_constant(self, node, scope):
         if node.name in scope.names:
             raise error(node, f"«{node.name}» вже оголошено. Двічі одне ім'я в одному місці не канає.")
-        self.require_type(node.declared_type, node)
-        if node.declared_type not in BUILTIN_TYPES:
+        declared = self.resolve_type(node.declared_type, node)
+        if not is_scalar(declared):
             raise error(node, "«Желєзобетонно» буває тільки «дрібняк», «крупняк» або «базар».")
         context = Context(None, scope, const_only=True)
-        self.require(node.initializer, node.declared_type, context)
+        self.require(node.initializer, declared, context)
         value = self.evaluate(node.initializer)
-        info = VarInfo(node.name, node.declared_type, "const", value)
+        info = VarInfo(node.name, declared, "const", value)
         node.info = info
         scope.names[node.name] = info
         self.constants[node.name] = info
@@ -372,7 +375,7 @@ class Analyzer:
                 "gt": left > right, "lt": left < right}[node.operator]
 
     def checked(self, node, value):
-        low, high = RANGES[node.type]
+        low, high = node.type.range
         if not low <= value <= high:
             raise error(node, f"Переповнення в желєзобетонно: {value} не влазить у «{word(node.type)}».")
         return value
@@ -435,7 +438,7 @@ class Analyzer:
             self.check_field_assignment(node, context)
         elif isinstance(node, PrintNode):
             if isinstance(node.value, StringNode):
-                node.value.type = "string"
+                node.value.type = STRING
             else:
                 self.expression(node.value, None, context)
         elif isinstance(node, ExitNode):
@@ -469,25 +472,25 @@ class Analyzer:
     def check_for(self, node, context):
         # Rules 27, 28: the bounds are checked outside the counter's scope; the
         # counter and the outer block of the body are one scope.
-        self.require_type(node.declared_type, node)
-        if node.declared_type not in INTEGER_TYPES:
+        counter_type = self.resolve_type(node.declared_type, node)
+        if not is_integer(counter_type):
             raise error(node.type_at, f"Лічильник «{node.name}» має бути цілим числом, "
-                                      f"а не «{word(node.declared_type)}».")
-        self.require(node.start, node.declared_type, context)
-        self.require(node.end, node.declared_type, context)
-        info = VarInfo(node.name, node.declared_type, "counter")
+                                      f"а не «{word(counter_type)}».")
+        self.require(node.start, counter_type, context)
+        self.require(node.end, counter_type, context)
+        info = VarInfo(node.name, counter_type, "counter")
         node.info = info
         scope = Scope(context.scope)
         scope.names[node.name] = info
         self.check_statements(node.body.statements, Context(context.function, scope, in_loop=True))
 
     def check_declaration(self, node, context):
-        self.require_type(node.declared_type, node)
+        declared = self.resolve_type(node.declared_type, node)
         # The initializer cannot see the name it declares: check it first.
-        self.require(node.initializer, node.declared_type, context)
+        self.require(node.initializer, declared, context)
         if node.name in context.scope.names:
             raise error(node, f"«{node.name}» вже оголошено. Двічі одне ім'я в одному місці не канає.")
-        info = VarInfo(node.name, node.declared_type, "mutable" if node.mutable else "immutable")
+        info = VarInfo(node.name, declared, "mutable" if node.mutable else "immutable")
         node.info = info
         context.scope.names[node.name] = info
 
@@ -543,7 +546,7 @@ class Analyzer:
 
     def require_integer(self, node, expected, context):
         actual = self.expression(node, expected, context)
-        if actual not in INTEGER_TYPES:
+        if not is_integer(actual):
             raise error(node, f"Тут треба ціле число, а не «{word(actual)}».")
         return actual
 
@@ -558,8 +561,8 @@ class Analyzer:
             raise error(node, "У «желєзобетонно» тільки числа, «реально»/«гон», операції й інші константи.")
         value = literal_value(node)
         if value is not None:
-            result = expected if expected in INTEGER_TYPES else I64
-            low, high = RANGES[result]
+            result = expected if is_integer(expected) else I64
+            low, high = result.range
             if not low <= value <= high:
                 raise error(node, f"Число {value} не влазить у «{word(result)}»: "
                                   f"там від {low} до {high}.")
@@ -569,7 +572,7 @@ class Analyzer:
         if isinstance(node, BooleanNode):
             return BOOL
         if isinstance(node, ReadNode):
-            if expected in INTEGER_TYPES:
+            if is_integer(expected):
                 return expected
             if expected is None:
                 return I64
@@ -612,7 +615,7 @@ class Analyzer:
                     raise error(node, f"{what} не дав значення полю «{missing.name}», "
                                       f"а свого «це» в нього нема.")
             self.check_arguments(node, node.arguments, [f.type for f in given], what, context)
-            return structure.name
+            return StructType(structure.name)
         raise error(node, "Такий вираз тут не канає.")
 
     def mark_literal(self, node, type_name):
@@ -627,7 +630,7 @@ class Analyzer:
             self.require(node.left, BOOL, context)
             self.require(node.right, BOOL, context)
             return BOOL
-        if operator in ARITHMETIC and expected in INTEGER_TYPES:
+        if operator in ARITHMETIC and is_integer(expected):
             self.require(node.left, expected, context)
             self.require(node.right, expected, context)
             return expected
@@ -643,10 +646,10 @@ class Analyzer:
             self.require(node.left, I64, context)
             self.require(node.right, I64, context)
         if operator in EQUALITY:
-            if operand_type not in BUILTIN_TYPES:
-                raise error(node, f"Об'єкти «{operand_type}» не порівнюють: «рівно» тільки для чисел і базару.")
+            if not is_comparable(operand_type):
+                raise error(node, f"Об'єкти «{word(operand_type)}» не порівнюють: «рівно» тільки для чисел і базару.")
             return BOOL
-        if operand_type not in INTEGER_TYPES:
+        if not is_integer(operand_type):
             raise error(node, f"Тут треба цілі числа, а не «{word(operand_type)}».")
         return BOOL if operator in ORDERING else operand_type
 
@@ -690,10 +693,10 @@ class Analyzer:
         return target.result
 
     def object_structure(self, node, context):
-        type_name = self.expression(node, None, context)
-        if type_name not in self.structures:
-            raise error(node, f"«{word(type_name)}» — не об'єкт, у нього нема полів і функцій.")
-        return self.structures[type_name]
+        object_type = self.expression(node, None, context)
+        if not isinstance(object_type, StructType):
+            raise error(node, f"«{word(object_type)}» — не об'єкт, у нього нема полів і функцій.")
+        return self.structures[object_type.name]
 
     def check_arguments(self, node, arguments, types, what, context):
         # Rule 11, 17: the number and the types of the arguments.

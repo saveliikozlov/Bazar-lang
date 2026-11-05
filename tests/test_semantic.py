@@ -6,6 +6,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from bazar_types import BOOL, I32, I64  # noqa: E402
 from parser import CompilationError, parse_program  # noqa: E402
 from semantic import FieldInfo, analyze  # noqa: E402
 
@@ -37,7 +38,7 @@ class SymbolTableTest(unittest.TestCase):
         _, info = check(POINT)
         fields = info.structures["Точка"].fields
         self.assertEqual([(f.name, f.index, f.type, f.mutable) for f in fields.values()],
-                         [("х", 0, "i32", True), ("у", 1, "i64", False)])
+                         [("х", 0, I32, True), ("у", 1, I64, False)])
 
     def test_mutating_flags_follow_calls_on_the_own_object(self):
         _, info = check(POINT)
@@ -50,8 +51,8 @@ class SymbolTableTest(unittest.TestCase):
         _, info = check("маю дєло ф(а1 тіпа дрібняк, б1 тіпа базар) на виході крупняк\n"
                         "    тримай 1\nпорішали")
         function = info.functions["ф"]
-        self.assertEqual([(p.name, p.type) for p in function.parameters], [("а1", "i32"), ("б1", "bool")])
-        self.assertEqual(function.result, "i64")
+        self.assertEqual([(p.name, p.type) for p in function.parameters], [("а1", I32), ("б1", BOOL)])
+        self.assertEqual(function.result, I64)
 
     def test_constants_are_computed(self):
         _, info = check("желєзобетонно А тіпа дрібняк це 7 ділити на мінус 2\n"
@@ -63,9 +64,9 @@ class AnnotationTest(unittest.TestCase):
     def test_literals_take_their_type_from_context(self):
         program, _ = check("зуб даю а1 тіпа дрібняк це 1 плюс 2\nбазарь 3 плюс 4\nбазарь а1 плюс 5")
         first, second, third = program.statements
-        self.assertEqual(first.initializer.left.type, "i32")
-        self.assertEqual(second.value.left.type, "i64")      # no context: крупняк
-        self.assertEqual(third.value.right.type, "i32")      # from the other operand
+        self.assertEqual(first.initializer.left.type, I32)
+        self.assertEqual(second.value.left.type, I64)      # no context: крупняк
+        self.assertEqual(third.value.right.type, I32)      # from the other operand
 
     def test_lookup_order_inside_a_member_function(self):
         program, _ = check("желєзобетонно х тіпа крупняк це 9\n"

@@ -30,12 +30,13 @@ from ast_nodes import (
     ExitNode, FieldAccessNode, FieldAssignmentNode, ForNode, IdentifierNode, IfNode, IntegerNode,
     MemberCallNode, NewObjectNode, PrintNode, ReadNode, ReturnNode, StringNode, UnaryNode, WhileNode,
 )
+from bazar_types import BoolType, IntType, StructType, is_scalar
 from semantic import FieldInfo
 
 I1, I8, I32, I64 = ir.IntType(1), ir.IntType(8), ir.IntType(32), ir.IntType(64)
 I8_PTR = I8.as_pointer()
-SCALARS = {"i32": I32, "i64": I64, "bool": I1}
-INT_FORMATS = {"i32": "%d", "i64": "%lld"}
+INT_LLTYPES = {32: I32, 64: I64}         # IntType.bits -> LLVM type
+INT_FORMATS = {32: "%d", 64: "%lld"}     # IntType.bits -> printf and scanf format
 COMPARISONS = {"eq": "==", "ne": "!=", "gt": ">", "lt": "<"}
 OVERFLOW_WORDS = {"add": "плюс", "sub": "мінус", "mul": "на"}
 EXIT_MESSAGE = "Всьо, розходимось: %lld\n"
@@ -83,8 +84,15 @@ class CodeGenerator:
         llvm_type = ir.FunctionType(self.lltype(function.result), parameters)
         self.functions[function] = ir.Function(self.module, llvm_type, name=name)
 
-    def lltype(self, type_name):
-        return SCALARS.get(type_name) or self.struct_types[type_name]
+    def lltype(self, t):
+        """The LLVM type of a bazar_types.Type."""
+        if isinstance(t, IntType):
+            return INT_LLTYPES[t.bits]
+        if isinstance(t, BoolType):
+            return I1
+        if isinstance(t, StructType):
+            return self.struct_types[t.name]
+        raise AssertionError(f"no LLVM type for {t}")
 
     def string(self, text):
         """A pointer to a private global constant holding text and a NUL byte."""
@@ -164,7 +172,7 @@ class CodeGenerator:
 
     def statement(self, node):
         if isinstance(node, DeclarationNode):
-            slot = self.alloca(self.lltype(node.declared_type), node.name)
+            slot = self.alloca(self.lltype(node.info.type), node.name)
             self.builder.store(self.value(node.initializer), slot)
             self.slots[node.info] = slot
         elif isinstance(node, AssignmentNode):
@@ -259,18 +267,18 @@ class CodeGenerator:
             return
         self.print_value(self.value(node), node.type, "", "\n")
 
-    def print_value(self, value, type_name, prefix, suffix):
+    def print_value(self, value, t, prefix, suffix):
         """printf prefix, the value, and suffix; objects walk their field table."""
-        if type_name in INT_FORMATS:
-            self.builder.call(self.printf, [self.string(prefix + INT_FORMATS[type_name] + suffix), value])
-        elif type_name == "bool":
+        if isinstance(t, IntType):
+            self.builder.call(self.printf, [self.string(prefix + INT_FORMATS[t.bits] + suffix), value])
+        elif isinstance(t, BoolType):
             text = self.builder.select(value, self.string("реально"), self.string("гон"))
             self.builder.call(self.printf, [self.string(prefix + "%s" + suffix), text])
-        else:
-            structure = self.info.structures[type_name]
-            slot = self.alloca(self.struct_types[type_name])
+        elif isinstance(t, StructType):
+            structure = self.info.structures[t.name]
+            slot = self.alloca(self.lltype(t))
             self.builder.store(value, slot)
-            opening = f"{prefix}{type_name} {{"
+            opening = f"{prefix}{t.name} {{"
             fields = list(structure.fields.values())
             if not fields:
                 self.builder.call(self.printf, [self.string(opening + "}" + suffix)])
@@ -281,26 +289,28 @@ class CodeGenerator:
                 separator = opening + " " if number == 0 else ", "
                 closing = " }" + suffix if number == len(fields) - 1 else ""
                 self.print_value(field_value, field.type, f"{separator}{field.name}: ", closing)
+        else:
+            raise AssertionError(f"no printing for {t}")
 
     # -------------------------------------------------------- expressions
 
     def value(self, node):
         if isinstance(node, IntegerNode):
-            return ir.Constant(SCALARS[node.type], int(node.value))
+            return ir.Constant(self.lltype(node.type), int(node.value))
         if isinstance(node, BooleanNode):
             return ir.Constant(I1, int(node.value))
         if isinstance(node, IdentifierNode):
             if not isinstance(node.ref, FieldInfo) and node.ref.kind == "const":
-                return ir.Constant(SCALARS[node.ref.type], int(node.ref.value))
+                return ir.Constant(self.lltype(node.ref.type), int(node.ref.value))
             return self.builder.load(self.name_address(node.ref), name=node.name)
         if isinstance(node, ReadNode):
-            slot = self.alloca(SCALARS[node.type])
-            self.builder.store(ir.Constant(SCALARS[node.type], 0), slot)   # 0 when input ends
-            self.builder.call(self.scanf, [self.string(INT_FORMATS[node.type]), slot])
+            slot = self.alloca(self.lltype(node.type))
+            self.builder.store(ir.Constant(self.lltype(node.type), 0), slot)   # 0 when input ends
+            self.builder.call(self.scanf, [self.string(INT_FORMATS[node.type.bits]), slot])
             return self.builder.load(slot)
         if isinstance(node, UnaryNode):
             if isinstance(node.operand, IntegerNode):
-                return ir.Constant(SCALARS[node.type], -int(node.operand.value))
+                return ir.Constant(self.lltype(node.type), -int(node.operand.value))
             operand = self.value(node.operand)
             return self.checked(self.builder.ssub_with_overflow, ir.Constant(operand.type, 0),
                                 operand, node, "мінус")
@@ -327,7 +337,7 @@ class CodeGenerator:
                 pointer = self.address(node.object)
             else:
                 # A temporary object: only a non-mutating call reaches here (semantic rule 24).
-                pointer = self.alloca(self.struct_types[node.object.type])
+                pointer = self.alloca(self.lltype(node.object.type))
                 self.builder.store(self.value(node.object), pointer)
             arguments = [pointer] + [self.value(a) for a in node.arguments]
             return self.builder.call(self.functions[node.target], arguments)
@@ -341,9 +351,9 @@ class CodeGenerator:
         return ir.Constant(self.struct_types[structure_name], elements)
 
     def default_value(self, field):
-        if field.type in SCALARS:
-            return ir.Constant(SCALARS[field.type], int(field.default))
-        return self.default_object(field.type, 0)
+        if is_scalar(field.type):
+            return ir.Constant(self.lltype(field.type), int(field.default))
+        return self.default_object(field.type.name, 0)
 
     def binary(self, node):
         operator = node.operator

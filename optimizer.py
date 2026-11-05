@@ -26,7 +26,8 @@ from ast_nodes import (
     IdentifierNode, IfNode, IntegerNode, MemberCallNode, NewObjectNode, PrintNode, ReturnNode,
     StructureNode, UnaryNode, WhileNode,
 )
-from semantic import RANGES, VarInfo
+from bazar_types import is_integer
+from semantic import VarInfo
 
 ARITHMETIC = ("add", "sub", "mul", "div")
 
@@ -125,7 +126,7 @@ def constant_value(node):
         return int(node.value)
     if isinstance(node, IdentifierNode):
         known = isinstance(node.ref, VarInfo) and node.ref.kind == "const"
-        return node.ref.value if known and node.ref.type in RANGES else None
+        return node.ref.value if known and is_integer(node.ref.type) else None
     if isinstance(node, UnaryNode):
         operand = constant_value(node.operand)
         value = None if operand is None else -operand
@@ -146,7 +147,7 @@ def constant_value(node):
         return None
     if value is None:
         return None
-    low, high = RANGES[node.type]
+    low, high = node.type.range
     return value if low <= value <= high else None
 
 
