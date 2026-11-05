@@ -1,0 +1,32 @@
+ProgramNode line=1 column=1
+  DeclarationNode line=1 column=1 name=н type=i32 mutable=true
+    initializer:
+      IntegerNode line=1 column=53 value=2
+  WhileNode line=2 column=1
+    condition:
+      BinaryNode line=2 column=32 operator=gt
+        left:
+          IdentifierNode line=2 column=29 name=н
+        right:
+          IntegerNode line=2 column=45 value=0
+    body:
+      BlockNode line=3 column=5
+        AssignmentNode line=3 column=5 name=н
+          value:
+            BinaryNode line=3 column=43 operator=sub
+              left:
+                IdentifierNode line=3 column=40 name=н
+              right:
+                IntegerNode line=3 column=54 value=1
+  ForNode line=5 column=1 name=к type=i64
+    start:
+      BinaryNode line=5 column=56 operator=add
+        left:
+          IntegerNode line=5 column=54 value=1
+        right:
+          IntegerNode line=5 column=65 value=1
+    end:
+      IntegerNode line=5 column=72 value=10
+    body:
+      BlockNode line=6 column=5
+        BreakNode line=6 column=5
