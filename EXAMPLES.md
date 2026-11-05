@@ -197,3 +197,21 @@ A non-Boolean condition and an undeclared name.
 These are covered by `tests/invalid/semantic_*.bazar`, one error per file,
 together with the Stage 2 rules: argument counts and types, `тримай` types,
 unknown fields, constant chains, and mutating calls on constant objects.
+
+## Loops
+
+Add the numbers from 1 to 10, stopping early once the counter passes 5:
+
+```text
+мутна тєма сума тіпа крупняк це 0
+крутимось к тіпа крупняк від 1 по 10
+    якшо реально к більше 5
+        харе
+    отакої
+    перевзувся сума тепер сума плюс к
+докрутились
+базарь сума
+```
+
+This prints `15`. See also [examples/loop_countdown.bazar](examples/loop_countdown.bazar)
+and [examples/loop_primes.bazar](examples/loop_primes.bazar).
