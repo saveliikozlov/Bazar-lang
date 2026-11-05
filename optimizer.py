@@ -23,8 +23,8 @@ reports the same position.
 from ast_nodes import (
     ArrayFillNode, ArrayLiteralNode, AssignmentNode, ASTNode, BinaryNode, BlockNode, BooleanNode, CallNode,
     CallStatementNode, DeclarationNode, ExitNode, FieldAccessNode, FieldAssignmentNode, ForEachNode, ForNode,
-    FunctionNode, IdentifierNode, IfNode, IndexNode, IntegerNode, MemberCallNode, NewObjectNode, PrintNode,
-    ReturnNode, StructureNode, UnaryNode, VariantNode, WhileNode, walk,
+    BindingPatternNode, FunctionNode, IdentifierNode, IfNode, IndexNode, IntegerNode, MatchNode,
+    MemberCallNode, NewObjectNode, PrintNode, ReturnNode, StructureNode, UnaryNode, VariantNode, WhileNode, walk,
 )
 from semantic import VarInfo, constant_value
 
@@ -291,6 +291,8 @@ def statement_expressions(statement):
         return [statement.start, statement.end]
     if isinstance(statement, ForEachNode):
         return [statement.array]
+    if isinstance(statement, MatchNode):
+        return [statement.subject]
     return []
 
 
@@ -393,7 +395,7 @@ class Inliner:
         owned = {declaration.info for declaration in parameters}
         for statement in body:
             for item in walk(statement):
-                if isinstance(item, (DeclarationNode, ForNode, ForEachNode)):
+                if isinstance(item, (DeclarationNode, ForNode, ForEachNode, BindingPatternNode)):
                     owned.add(item.info)
         for info in owned:
             info.name = self.renamed(info.name, function)
@@ -401,7 +403,7 @@ class Inliner:
             declaration.name = declaration.info.name
         for statement in body:
             for item in walk(statement):
-                if isinstance(item, (DeclarationNode, ForNode, ForEachNode)):
+                if isinstance(item, (DeclarationNode, ForNode, ForEachNode, BindingPatternNode)):
                     item.name = item.info.name
                 elif isinstance(item, (IdentifierNode, AssignmentNode)) and item.ref in owned:
                     item.name = item.ref.name

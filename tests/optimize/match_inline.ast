@@ -1,0 +1,51 @@
+ProgramNode line=2 column=1
+  DeclarationNode line=12 column=1 name=х type=i32 mutable=false
+    initializer:
+      IntegerNode line=12 column=47 value=5
+  DeclarationNode line=13 column=14 name=з.оцінка.1 type=Option<i32> mutable=false
+    initializer:
+      VariantNode line=13 column=27 variant=some
+        value:
+          IdentifierNode line=13 column=36 name=х
+  DeclarationNode line=3 column=5 name=р.оцінка.1 type=i32 mutable=true
+    initializer:
+      IntegerNode line=3 column=57 value=0
+  MatchNode line=4 column=5
+    subject:
+      IdentifierNode line=4 column=20 name=з.оцінка.1
+    arms:
+      MatchArmNode line=5 column=5
+        pattern:
+          VariantPatternNode line=5 column=20 variant=some
+            inner:
+              BindingPatternNode line=5 column=29 name=х.оцінка.1
+        guard: None
+        body:
+          BlockNode line=6 column=9
+            AssignmentNode line=6 column=9 name=р.оцінка.1
+              value:
+                BinaryNode line=6 column=47 operator=mul
+                  left:
+                    IdentifierNode line=6 column=44 name=х.оцінка.1
+                  right:
+                    IntegerNode line=6 column=52 value=2
+      MatchArmNode line=7 column=5
+        pattern:
+          VariantPatternNode line=7 column=20 variant=none
+        guard: None
+        body:
+          BlockNode line=8 column=9
+            AssignmentNode line=8 column=9 name=р.оцінка.1
+              value:
+                UnaryNode line=8 column=44 operator=neg
+                  operand:
+                    IntegerNode line=8 column=55 value=1
+  DeclarationNode line=10 column=5 name=результат.оцінка.1 type=i32 mutable=false
+    initializer:
+      IdentifierNode line=10 column=18 name=р.оцінка.1
+  PrintNode line=13 column=1
+    value:
+      IdentifierNode line=13 column=14 name=результат.оцінка.1
+  PrintNode line=14 column=1
+    value:
+      IdentifierNode line=14 column=14 name=х

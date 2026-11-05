@@ -31,7 +31,9 @@ parameter that points to memory of the caller.
 Arithmetic uses the *.with.overflow intrinsics; an overflow, a division by
 zero, MIN ділити на мінус 1, or an array index out of range writes one line to
 stderr and exits with 1. Code that walks an array (filling, printing,
-comparing, крутимось … з) is a loop at run time, never unrolled.
+comparing, крутимось … з) is a loop at run time, never unrolled. розбери tests
+its arms in order, each pattern against the value in memory, and falls to the
+next arm on the first part that does not match.
 """
 
 from llvmlite import ir
@@ -40,7 +42,8 @@ import llvmlite.binding as llvm
 from ast_nodes import (
     ArrayFillNode, ArrayLiteralNode, AssignmentNode, BinaryNode, BooleanNode, BreakNode, CallNode,
     CallStatementNode, DeclarationNode, ExitNode, FieldAccessNode, FieldAssignmentNode, ForEachNode, ForNode,
-    IdentifierNode, IfNode, IndexNode, IntegerNode, MemberCallNode, NewObjectNode, PrintNode, ReadNode,
+    BindingPatternNode, IdentifierNode, IfNode, IndexNode, IntegerNode, LiteralPatternNode, MatchNode,
+    StructurePatternNode, VariantPatternNode, WildcardPatternNode, MemberCallNode, NewObjectNode, PrintNode, ReadNode,
     ReturnNode, StringNode, UnaryNode, VariantNode, WhileNode, walk,
 )
 from bazar_types import (
@@ -247,6 +250,8 @@ class CodeGenerator:
             self.for_statement(node)
         elif isinstance(node, ForEachNode):
             self.for_each_statement(node)
+        elif isinstance(node, MatchNode):
+            self.match_statement(node)
         elif isinstance(node, BreakNode):
             self.builder.branch(self.loop_ends[-1])
         # Constant, function, and structure declarations produce no statements.
@@ -349,6 +354,78 @@ class CodeGenerator:
         self.builder.store(following, slot)
         self.builder.cbranch(self.builder.icmp_signed("==", following, length), end_block, body_block)
         self.builder.position_at_end(end_block)
+
+    def match_statement(self, node):
+        # The value is evaluated once into memory. A name or a field is read in
+        # place unless a guard could change it while the arms are tried; the
+        # names of an arm are copies, so its body cannot change what it matched.
+        subject_type = node.subject.type
+        if not is_aggregate(subject_type):
+            subject = self.alloca(self.lltype(subject_type))
+            self.builder.store(self.value(node.subject), subject)
+        elif addressable(node.subject) and not any(arm.guard is not None and changes_objects(arm.guard)
+                                                   for arm in node.arms):
+            subject = self.pointer(node.subject)
+        else:
+            subject = self.snapshot(node.subject)
+        end_block = self.new_block("match.end")
+        for arm in node.arms:
+            next_block = self.new_block("match.next")
+            self.test_pattern(arm.pattern, subject, next_block)
+            if arm.guard is not None:
+                body_block = self.new_block("match.body")
+                self.builder.cbranch(self.value(arm.guard), body_block, next_block)
+                self.builder.position_at_end(body_block)
+            self.statements(arm.body.statements)
+            if not self.builder.block.is_terminated:
+                self.builder.branch(end_block)
+            self.builder.position_at_end(next_block)
+        self.builder.unreachable()           # some arm always matches (semantic rule 44)
+        self.builder.position_at_end(end_block)
+
+    def test_pattern(self, pattern, pointer, fail_block):
+        """Continue at the current position if the value at pointer matches, else go to fail_block."""
+        t = pattern.type
+        if isinstance(pattern, WildcardPatternNode):
+            return
+        if isinstance(pattern, BindingPatternNode):
+            slot = self.alloca(self.lltype(t), pattern.name)
+            if is_aggregate(t):
+                self.copy(slot, pointer, t)
+            else:
+                self.builder.store(self.builder.load(pointer), slot)
+            self.slots[pattern.info] = slot
+            return
+        if isinstance(pattern, LiteralPatternNode):
+            expected = ir.Constant(self.lltype(t), int(pattern.value))
+            self.continue_if(self.builder.icmp_signed("==", self.builder.load(pointer), expected), fail_block)
+            return
+        if isinstance(pattern, VariantPatternNode):
+            tag = self.builder.load(self.element(pointer, 0))
+            held = pattern.variant in ("some", "ok")
+            self.continue_if(tag if held else self.builder.not_(tag), fail_block)
+            if pattern.inner is not None:
+                self.test_pattern(pattern.inner, self.element(pointer, 1 if held else 2), fail_block)
+            return
+        if isinstance(pattern, StructurePatternNode):
+            for index, field_pattern in enumerate(pattern.fields):
+                self.test_pattern(field_pattern, self.element(pointer, index), fail_block)
+            return
+        # OrPatternNode: the first alternative that matches wins.
+        matched_block = self.new_block("pattern.matched")
+        for alternative in pattern.alternatives[:-1]:
+            next_block = self.new_block("pattern.next")
+            self.test_pattern(alternative, pointer, next_block)
+            self.builder.branch(matched_block)
+            self.builder.position_at_end(next_block)
+        self.test_pattern(pattern.alternatives[-1], pointer, fail_block)
+        self.builder.branch(matched_block)
+        self.builder.position_at_end(matched_block)
+
+    def continue_if(self, condition, fail_block):
+        ok_block = self.new_block("pattern.ok")
+        self.builder.cbranch(condition, ok_block, fail_block)
+        self.builder.position_at_end(ok_block)
 
     def counted_loop(self, start, stop, body):
         """Run body(index) for every i64 index from start to stop - 1; nothing when start >= stop."""

@@ -155,5 +155,23 @@ class VariantAnnotationTest(unittest.TestCase):
         self.assertFalse(program.statements[3].value.fallback)      # або on базар stays logical OR
 
 
+
+class MatchAnnotationTest(unittest.TestCase):
+    def test_patterns_carry_types_bindings_and_values(self):
+        program, _ = check("зуб даю з тіпа може вийде дрібняк або облом базар це нема\nрозбери з\n"
+                           "випадок шось(вийшло(мінус 2))\n    базарь 0\nвипадок шось(вийшло(х))\n    базарь х\n"
+                           "випадок шось(облом(_)) або нема\n    базарь 1\nрозібрали")
+        first, second, third = program.statements[1].arms
+        literal = first.pattern.inner.inner
+        self.assertEqual((literal.type, literal.value), (I32, -2))
+        binding = second.pattern.inner.inner
+        self.assertEqual((binding.info.type, binding.info.kind), (I32, "immutable"))
+        self.assertEqual(third.pattern.type, OptionType(ResultType(I32, BOOL)))
+
+    def test_a_match_whose_arms_all_return_ends_the_function(self):
+        check("маю дєло ф(б тіпа базар) на виході дрібняк\n    розбери б\n    випадок реально\n"
+              "        тримай 1\n    випадок гон\n        тримай 0\n    розібрали\nпорішали")
+
+
 if __name__ == "__main__":
     unittest.main()

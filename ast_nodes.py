@@ -161,6 +161,71 @@ class ResultTypeNode(TypeNode):
         return f"Result<{self.ok}, {self.error}>"
 
 
+# ------------------------------------------------------------ patterns
+
+@dataclass
+class PatternNode(ASTNode):
+    """Base class for the patterns of випадок."""
+
+
+@dataclass
+class WildcardPatternNode(PatternNode):
+    """_: matches anything and binds nothing."""
+
+
+@dataclass
+class BindingPatternNode(PatternNode):
+    """A name: matches anything and binds the value to a new immutable variable."""
+    name: str
+
+    def attributes(self):
+        return (("name", self.name),)
+
+
+@dataclass
+class LiteralPatternNode(PatternNode):
+    """An integer, мінус and an integer, реально, or гон."""
+    literal: ExprNode
+
+    def labelled_children(self):
+        return (("literal", self.literal),)
+
+
+@dataclass
+class VariantPatternNode(PatternNode):
+    """шось(P), нема, вийшло(P), or облом(P); variant is some, none, ok, or err."""
+    variant: str
+    inner: PatternNode | None
+
+    def attributes(self):
+        return (("variant", self.variant),)
+
+    def labelled_children(self):
+        return () if self.inner is None else (("inner", self.inner),)
+
+
+@dataclass
+class StructurePatternNode(PatternNode):
+    """STRUCTURE(P, …): one pattern per field, in field order."""
+    structure: str
+    fields: list[PatternNode]
+
+    def attributes(self):
+        return (("structure", self.structure),)
+
+    def labelled_children(self):
+        return (("fields", self.fields),)
+
+
+@dataclass
+class OrPatternNode(PatternNode):
+    """P або P або …: matches when any alternative does; binds no names."""
+    alternatives: list[PatternNode]
+
+    def labelled_children(self):
+        return (("alternatives", self.alternatives),)
+
+
 # ------------------------------------------------------------- program
 
 @dataclass
@@ -300,6 +365,27 @@ class ForEachNode(StmtNode):
 
     def labelled_children(self):
         return (("array", self.array), ("body", self.body))
+
+
+@dataclass
+class MatchNode(StmtNode):
+    """розбери EXPR, then one випадок per arm, closed by розібрали."""
+    subject: ExprNode
+    arms: list[MatchArmNode]
+
+    def labelled_children(self):
+        return (("subject", self.subject), ("arms", self.arms))
+
+
+@dataclass
+class MatchArmNode(ASTNode):
+    """випадок PATTERN [якшо реально GUARD] and its body; positioned at випадок."""
+    pattern: PatternNode
+    guard: ExprNode | None
+    body: BlockNode
+
+    def labelled_children(self):
+        return (("pattern", self.pattern), ("guard", self.guard), ("body", self.body))
 
 
 @dataclass

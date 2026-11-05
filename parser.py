@@ -12,7 +12,8 @@ from ast_nodes import (
     ArrayFillNode, ArrayLiteralNode, ArrayTypeNode, AssignmentNode, BinaryNode, BlockNode, BooleanNode,
     BreakNode, CallNode, CallStatementNode, ConstantDeclarationNode, DeclarationNode, ExitNode,
     FieldAccessNode, FieldAssignmentNode, FieldNode, ForEachNode, ForNode, FunctionNode, IdentifierNode,
-    IfNode, IndexNode, IntegerNode, MemberCallNode, NamedTypeNode, NewObjectNode, OptionTypeNode,
+    BindingPatternNode, IfNode, IndexNode, LiteralPatternNode, MatchArmNode, MatchNode, OrPatternNode,
+    StructurePatternNode, VariantPatternNode, WildcardPatternNode, IntegerNode, MemberCallNode, NamedTypeNode, NewObjectNode, OptionTypeNode,
     ParameterNode, PrintNode, ProgramNode, ReadNode, ResultTypeNode, ReturnNode, StringNode, StructureNode,
     UnaryNode, VariantNode, WhileNode,
 )
@@ -32,7 +33,9 @@ LATIN_LOOKALIKES = str.maketrans("aceiopxy", "асеіорху")
 MAX_NESTING = 100
 
 # A block ends when one of these words starts a line.
-BLOCK_CLOSERS = ("а", "отакої", "порішали", "докрутились")
+BLOCK_CLOSERS = ("а", "отакої", "порішали", "докрутились", "випадок", "розібрали")
+# The pattern _ matches anything; everywhere else it is an ordinary name.
+WILDCARD = "_"
 
 
 class CompilationError(Exception):
@@ -189,6 +192,12 @@ class Parser:
                 return self.parse_if_statement()
             if token.text == "крутимось":
                 return self.parse_loop_statement()
+            if token.text == "розбери":
+                return self.parse_match()
+            if token.text == "випадок":
+                raise self.error("«Випадок» без «розбери»? Розбирати нічого: спочатку «розбери» значення.")
+            if token.text == "розібрали":
+                raise self.error("«Розібрали» без «розбери»? Закривати нічого.")
             if token.text == "харе":
                 return self.parse_break_statement()
             if token.text == "поки":
@@ -429,6 +438,117 @@ class Parser:
         self.leave()
         return body
 
+    def parse_match(self):
+        # match_statement = "розбери", expression, NEWLINE, { NEWLINE },
+        #                   arm, { arm }, "розібрали"
+        first = self.eat()
+        if self.at(NEWLINE) or self.at(EOF):
+            raise self.error("«Розбери» — а шо розбирати? Після нього чекаю значення.")
+        self.enter(first)
+        subject = self.parse_expression()
+        self.expect(NEWLINE, "Після значення для «розбери» чекаю кінець рядка, а тут {found}. "
+                             "Кожен «випадок» пиши з нового рядка.")
+        while self.at(NEWLINE):
+            self.eat()
+        if not self.at_keyword("випадок"):
+            if self.at(EOF):
+                raise self.unclosed_if(first)
+            raise self.error(f"Після «розбери» чекаю хоч один «випадок», а тут {describe(self.peek())}.")
+        arms = []
+        while self.at_keyword("випадок"):
+            arms.append(self.parse_arm(first))
+        self.expect_keyword("розібрали", f"Де «розібрали»? «Розбери» з рядка {first.line}:{first.column} "
+                                         f"відкрив, а закрити забув, тут {{found}}.")
+        self.leave()
+        return MatchNode(first.line, first.column, subject, arms)
+
+    def parse_arm(self, opener):
+        # arm = "випадок", pattern, [ "якшо", "реально", expression ], NEWLINE, block
+        first = self.eat()
+        pattern = self.parse_pattern()
+        guard = None
+        if self.at_keyword("якшо"):
+            self.eat()
+            self.expect_keyword("реально", "Умова випадку пишеться «якшо реально …», а тут {found}.")
+            guard = self.parse_expression()
+        self.expect(NEWLINE, "Після зразка чекаю кінець рядка або «якшо реально» з умовою, а тут {found}. "
+                             "Тіло випадку пиши з нового рядка.")
+        body = self.parse_block(opener, "arm")
+        return MatchArmNode(first.line, first.column, pattern, guard, body)
+
+    def parse_pattern(self):
+        # pattern = alternative, { "або", alternative }
+        first = self.parse_pattern_alternative()
+        if not self.at_keyword("або"):
+            return first
+        alternatives = [first]
+        while self.at_keyword("або"):
+            self.eat()
+            alternatives.append(self.parse_pattern_alternative())
+        return OrPatternNode(first.line, first.column, alternatives)
+
+    def parse_pattern_alternative(self):
+        # alternative = "_" | IDENT | IDENT, "(", [ pattern, { ",", pattern } ], ")"
+        #             | [ "мінус" ], INTEGER | "реально" | "гон"
+        #             | "шось", "(", pattern, ")" | "нема" | "вийшло", "(", pattern, ")"
+        #             | "облом", "(", pattern, ")" | "(", pattern, ")"
+        token = self.peek()
+        if token.kind == IDENT:
+            self.eat()
+            if self.at(LPAREN):
+                return StructurePatternNode(token.line, token.column, token.text, self.parse_pattern_list(token))
+            if token.text == WILDCARD:
+                return WildcardPatternNode(token.line, token.column)
+            return BindingPatternNode(token.line, token.column, token.text)
+        if token.kind == INTEGER or self.at_keyword("мінус"):
+            minus = self.eat() if self.at_keyword("мінус") else None
+            digits = self.expect(INTEGER, "Після «мінус» у зразку чекаю число, а тут {found}.")
+            if minus is None and digits.text.lstrip("0") == I64_MIN_MAGNITUDE:
+                raise self.error(f"Число {I64_MIN_MAGNITUDE} не влазить навіть у «крупняк»: "
+                                 f"так можна писати тільки «мінус {I64_MIN_MAGNITUDE}».", digits)
+            literal = IntegerNode(digits.line, digits.column, digits.text.lstrip("0") or "0")
+            if minus is not None:
+                literal = UnaryNode(minus.line, minus.column, "neg", literal)
+            return LiteralPatternNode(token.line, token.column, literal)
+        if self.at_keyword("реально", "гон"):
+            return LiteralPatternNode(token.line, token.column, self.parse_boolean_literal())
+        if self.at_keyword(*VARIANTS):
+            self.eat()
+            variant = VARIANTS[token.text]
+            if variant == "none":
+                return VariantPatternNode(token.line, token.column, variant, None)
+            opener = self.expect(LPAREN, f"Після «{token.text}» у зразку чекаю «(» і зразок у дужках, "
+                                         f"а тут {{found}}.")
+            self.enter(opener)
+            inner = self.parse_pattern()
+            self.expect(RPAREN, f"Дужку з рядка {opener.line}:{opener.column} не закрито: чекаю «)», "
+                                f"а тут {{found}}.")
+            self.leave()
+            return VariantPatternNode(token.line, token.column, variant, inner)
+        if token.kind == LPAREN:
+            self.eat()
+            self.enter(token)
+            inner = self.parse_pattern()
+            self.expect(RPAREN, f"Дужку з рядка {token.line}:{token.column} не закрито: чекаю «)», а тут {{found}}.")
+            self.leave()
+            return inner
+        raise self.error(f"Шо за зразок? Чекаю «_», ім'я, число, «реально», «гон», «шось(…)», «нема», "
+                         f"«вийшло(…)», «облом(…)» або структуру «Назва(…)», а тут {describe(token)}.")
+
+    def parse_pattern_list(self, name):
+        opener = self.eat()
+        self.enter(opener)
+        patterns = []
+        if not self.at(RPAREN):
+            patterns.append(self.parse_pattern())
+            while self.at(COMMA):
+                self.eat()
+                patterns.append(self.parse_pattern())
+        self.expect(RPAREN, f"Дужку з рядка {opener.line}:{opener.column} не закрито: "
+                            f"чекаю «,» або «)», а тут {{found}}.")
+        self.leave()
+        return patterns
+
     def parse_break_statement(self):
         # "харе"
         first = self.eat()
@@ -439,7 +559,7 @@ class Parser:
         while self.at(NEWLINE):
             self.eat()
         if self.at_keyword(*BLOCK_CLOSERS) or self.at(EOF):
-            kind = {"if": "«якшо реально»", "else": "«а нє»", "loop": "«крутимось»"}[branch]
+            kind = {"if": "«якшо реально»", "else": "«а нє»", "loop": "«крутимось»", "arm": "«випадок»"}[branch]
             raise self.error(f"Блок {kind} пустий. Хотів шось зробить чи просто зайшов?")
         first = self.peek()
         statements = [self.parse_block_statement(opener)]
@@ -455,6 +575,9 @@ class Parser:
         return BlockNode(first.line, first.column, statements)
 
     def unclosed_if(self, opener):
+        if opener.text == "розбери":
+            return self.error(f"Де «розібрали»? «Розбери» з рядка {opener.line}:{opener.column} "
+                              f"не закрито, а файл уже скінчився.")
         if opener.text == "крутимось":
             return self.error(f"Де «докрутились»? Цикл із рядка {opener.line}:{opener.column} "
                               f"не закритий, а файл уже скінчився.")

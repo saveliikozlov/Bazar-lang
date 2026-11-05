@@ -74,8 +74,8 @@ npm run test:vsix        # package, install into an isolated profile, and test
 ```
 
 `npm run sync-backend`, automatically run by `test` and `package`, copies the
-root `lexer.py`, `parser.py`, `ast_nodes.py`, `semantic.py`, and `bazar_types.py`,
-plus `bridge/bazar_bridge.py`, into generated `backend/`. Do not edit or commit
+root `lexer.py`, `parser.py`, `ast_nodes.py`, `semantic.py`, `bazar_types.py`, and
+`exhaustiveness.py`, plus `bridge/bazar_bridge.py`, into generated `backend/`. Do not edit or commit
 these copies: their original files are authoritative. The package is
 self-contained and works on `.bazar` files outside this repository.
 

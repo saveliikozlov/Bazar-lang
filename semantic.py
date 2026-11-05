@@ -19,6 +19,9 @@ generation:
 * a check з.шось, з.нема, р.вийшло, р.облом is a FieldAccessNode whose
   field_info is None and whose .variant is some, none, ok, or err;
 * BinaryNode.fallback: True for з або x, whose left side is може or вийде;
+* every pattern of розбери gets .type, the type of the value it matches;
+  BindingPatternNode.info is its VarInfo, and LiteralPatternNode.value the
+  int or bool it compares with.
 * ConstantDeclarationNode.info.value: the value computed at compile time.
 
 The first error raises CompilationError with the position of the node that
@@ -31,7 +34,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from ast_nodes import (
-    ArrayFillNode, ArrayLiteralNode, ArrayTypeNode, AssignmentNode, BinaryNode, BooleanNode, BreakNode,
+    ArrayFillNode, ArrayLiteralNode, ArrayTypeNode, AssignmentNode, BinaryNode, BindingPatternNode,
+    BooleanNode, BreakNode, LiteralPatternNode, MatchNode, OrPatternNode, StructurePatternNode,
+    VariantPatternNode, WildcardPatternNode,
     CallNode, CallStatementNode, ConstantDeclarationNode, DeclarationNode, ExitNode, FieldAccessNode,
     FieldAssignmentNode, ForEachNode, ForNode, FunctionNode, IdentifierNode, IfNode, IndexNode, IntegerNode,
     MemberCallNode, NewObjectNode, OptionTypeNode, PrintNode, ReadNode, ResultTypeNode, ReturnNode,
@@ -41,6 +46,7 @@ from bazar_types import (
     BOOL, BUILTIN_TYPES, I32, I64, STRING, ArrayType, OptionType, ResultType, StructType, Type,
     contained_structs, is_comparable, is_integer, is_scalar, is_variant,
 )
+from exhaustiveness import Alt, Con, Wild, show, useful
 from parser import CompilationError
 
 ARITHMETIC = ("add", "sub", "mul", "div")
@@ -205,6 +211,20 @@ def first_typed(nodes):
     """The operand to type first: one with a type of its own, else one that can infer it."""
     return (next((node for node in nodes if not is_flexible(node)), None)
             or next((node for node in nodes if not needs_context(node)), nodes[0]))
+
+
+def simple(pattern):
+    """A checked pattern in the shapes of exhaustiveness: Wild, Con, or Alt."""
+    if isinstance(pattern, (WildcardPatternNode, BindingPatternNode)):
+        return Wild()
+    if isinstance(pattern, LiteralPatternNode):
+        kind = "bool" if isinstance(pattern.value, bool) else "int"
+        return Con((kind, pattern.value))
+    if isinstance(pattern, VariantPatternNode):
+        return Con((pattern.variant,), () if pattern.inner is None else (simple(pattern.inner),))
+    if isinstance(pattern, StructurePatternNode):
+        return Con(("struct", pattern.structure), tuple(simple(field) for field in pattern.fields))
+    return Alt(tuple(simple(alternative) for alternative in pattern.alternatives))
 
 
 def is_name_chain(node):
@@ -516,6 +536,9 @@ class Analyzer:
         if isinstance(last, IfNode) and last.else_body is not None:
             return (self.always_returns(last.then_body.statements)
                     and self.always_returns(last.else_body.statements))
+        if isinstance(last, MatchNode):
+            # Rule 46: one arm always runs, so it is enough that every arm returns.
+            return all(self.always_returns(arm.body.statements) for arm in last.arms)
         return False
 
     def check_main(self, statements):
@@ -580,6 +603,8 @@ class Analyzer:
             self.check_for(node, context)
         elif isinstance(node, ForEachNode):
             self.check_for_each(node, context)
+        elif isinstance(node, MatchNode):
+            self.check_match(node, context)
         elif isinstance(node, BreakNode):
             if not context.in_loop:
                 raise error(node, "«Харе» — тільки всередині «крутимось»: виходити нема з чого.")
@@ -620,6 +645,86 @@ class Analyzer:
         scope = Scope(context.scope)
         scope.names[node.name] = info
         self.check_statements(node.body.statements, Context(context.function, scope, in_loop=True))
+
+    def check_match(self, node, context):
+        # Rule 43: the value is evaluated once; each arm is a child scope that
+        # holds its names and the outer block of its body.
+        subject_type = self.expression(node.subject, None, context)
+        covered = []                     # one row per alternative of each arm without a guard
+        for arm in node.arms:
+            names = {}
+            self.check_pattern(arm.pattern, subject_type, names, False, context)
+            alternatives = arm.pattern.alternatives if isinstance(arm.pattern, OrPatternNode) else [arm.pattern]
+            seen = list(covered)
+            for alternative in alternatives:
+                # Rule 45: an arm, or one alternative of it, that nothing can reach is an error.
+                row = (simple(alternative),)
+                if useful(seen, row, [subject_type], self.structures) is None:
+                    what = "Цей варіант у «або»" if len(alternatives) > 1 else "Цей випадок"
+                    raise error(alternative, f"{what} ніколи не спрацює: усе, шо він ловить, "
+                                             f"уже розібрано вище.")
+                seen.append(row)
+            if arm.guard is None:
+                covered.extend((simple(alternative),) for alternative in alternatives)
+            scope = Scope(context.scope)
+            scope.names.update(names)
+            arm_context = Context(context.function, scope, in_loop=context.in_loop)
+            if arm.guard is not None:
+                self.require(arm.guard, BOOL, arm_context)
+            self.check_statements(arm.body.statements, arm_context)
+        # Rule 44: every value has an arm; an arm with a guard may not match, so it does not count.
+        witness = useful(covered, (Wild(),), [subject_type], self.structures)
+        if witness is not None:
+            guarded = any(arm.guard is not None for arm in node.arms)
+            note = (" Випадки з «якшо реально» не рахуються: їхня умова може не справдитись."
+                    if guarded else "")
+            raise error(node, f"Не всі випадки розібрано: шо робити з «{show(witness[0])}»? "
+                              f"Додай для нього «випадок» або «випадок _».{note}")
+
+    def check_pattern(self, node, t, names, in_alternatives, context):
+        """Check a pattern against the type of the value it matches; collect the names it binds."""
+        node.type = t
+        if isinstance(node, WildcardPatternNode):
+            return
+        if isinstance(node, BindingPatternNode):
+            if in_alternatives:
+                raise error(node, f"У зразку з «або» імена не прив'язують: тут «{node.name}». "
+                                  f"Пиши «_» або розбери варіанти окремими випадками.")
+            if node.name in names:
+                raise error(node, f"Ім'я «{node.name}» уже є в цьому зразку.")
+            node.info = VarInfo(node.name, t, "immutable")
+            names[node.name] = node.info
+            return
+        if isinstance(node, LiteralPatternNode):
+            self.require(node.literal, t, context)
+            literal = node.literal
+            node.value = literal.value if isinstance(literal, BooleanNode) else literal_value(literal)
+            return
+        if isinstance(node, VariantPatternNode):
+            option = node.variant in ("some", "none")
+            if not isinstance(t, OptionType if option else ResultType):
+                written = {"some": "шось(…)", "none": "нема", "ok": "вийшло(…)", "err": "облом(…)"}[node.variant]
+                owner = "може" if option else "вийде"
+                raise error(node, f"Зразок «{written}» — для «{owner}», а розбираємо «{word(t)}».")
+            if node.inner is not None:
+                inner = t.inner if option else (t.ok if node.variant == "ok" else t.error)
+                self.check_pattern(node.inner, inner, names, in_alternatives, context)
+            return
+        if isinstance(node, StructurePatternNode):
+            if node.structure not in self.structures:
+                raise error(node, f"Шо за структура «{node.structure}»? Такої «такі діла» нема.")
+            if t != StructType(node.structure):
+                raise error(node, f"Зразок «{node.structure}(…)» — для «{node.structure}», "
+                                  f"а розбираємо «{word(t)}».")
+            fields = list(self.structures[node.structure].fields.values())
+            if len(node.fields) != len(fields):
+                raise error(node, f"У «{node.structure}» полів: {len(fields)}, а в зразку {len(node.fields)}. "
+                                  f"Для поля, яке не цікавить, пиши «_».")
+            for field_pattern, field_info in zip(node.fields, fields):
+                self.check_pattern(field_pattern, field_info.type, names, in_alternatives, context)
+            return
+        for alternative in node.alternatives:       # OrPatternNode
+            self.check_pattern(alternative, t, names, True, context)
 
     def check_declaration(self, node, context):
         declared = self.resolve_type(node.declared_type, context)

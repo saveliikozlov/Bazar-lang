@@ -1,0 +1,91 @@
+ProgramNode line=2 column=1
+  StructureNode line=2 column=1 name=Точка
+    fields:
+      FieldNode line=3 column=5 name=х type=i32 mutable=false index=0
+        default: None
+      FieldNode line=4 column=5 name=у type=i32 mutable=false index=1
+        default: None
+    methods: []
+  DeclarationNode line=6 column=1 name=_ type=Option<Точка> mutable=false
+    initializer:
+      VariantNode line=6 column=51 variant=some
+        value:
+          NewObjectNode line=6 column=60 structure=Точка
+            arguments:
+              IntegerNode line=6 column=86 value=0
+              UnaryNode line=6 column=89 operator=neg
+                operand:
+                  IntegerNode line=6 column=100 value=1
+  MatchNode line=7 column=1
+    subject:
+      IdentifierNode line=7 column=16 name=_
+    arms:
+      MatchArmNode line=8 column=1
+        pattern:
+          VariantPatternNode line=8 column=16 variant=some
+            inner:
+              OrPatternNode line=8 column=25
+                alternatives:
+                  StructurePatternNode line=8 column=25 structure=Точка
+                    fields:
+                      LiteralPatternNode line=8 column=36
+                        literal:
+                          IntegerNode line=8 column=36 value=0
+                      LiteralPatternNode line=8 column=39
+                        literal:
+                          UnaryNode line=8 column=39 operator=neg
+                            operand:
+                              IntegerNode line=8 column=50 value=1
+                  StructurePatternNode line=8 column=60 structure=Точка
+                    fields:
+                      LiteralPatternNode line=8 column=71
+                        literal:
+                          IntegerNode line=8 column=71 value=1
+                      LiteralPatternNode line=8 column=74
+                        literal:
+                          IntegerNode line=8 column=74 value=0
+        guard: None
+        body:
+          BlockNode line=9 column=5
+            PrintNode line=9 column=5
+              value:
+                StringNode line=9 column=18 value="кут"
+      MatchArmNode line=10 column=1
+        pattern:
+          VariantPatternNode line=10 column=16 variant=some
+            inner:
+              StructurePatternNode line=10 column=25 structure=Точка
+                fields:
+                  BindingPatternNode line=10 column=36 name=х
+                  WildcardPatternNode line=10 column=40
+        guard:
+          BinaryNode line=10 column=71 operator=gt
+            left:
+              IdentifierNode line=10 column=68 name=х
+            right:
+              IntegerNode line=10 column=84 value=0
+        body:
+          BlockNode line=11 column=5
+            PrintNode line=11 column=5
+              value:
+                IdentifierNode line=11 column=18 name=х
+      MatchArmNode line=12 column=1
+        pattern:
+          VariantPatternNode line=12 column=16 variant=some
+            inner:
+              BindingPatternNode line=12 column=25 name=т
+        guard: None
+        body:
+          BlockNode line=13 column=5
+            PrintNode line=13 column=5
+              value:
+                IdentifierNode line=13 column=18 name=т
+      MatchArmNode line=14 column=1
+        pattern:
+          VariantPatternNode line=14 column=16 variant=none
+        guard: None
+        body:
+          BlockNode line=15 column=5
+            PrintNode line=15 column=5
+              value:
+                BooleanNode line=15 column=18 value=false
