@@ -10,7 +10,28 @@
       "patterns": [
         {
           "name": "constant.character.escape.bazar",
-          "match": "\\\\[n\"\\\\]"
+          "match": "\\\\[n\"\\\\{}]"
+        },
+        {
+          "name": "meta.interpolation.bazar",
+          "contentName": "source.bazar.embedded",
+          "begin": "\\{",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.section.interpolation.begin.bazar"
+            }
+          },
+          "end": "\\}|(?=\"|$)",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.interpolation.end.bazar"
+            }
+          },
+          "patterns": [
+            {
+              "include": "$self"
+            }
+          ]
         }
       ]
     },

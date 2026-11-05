@@ -98,7 +98,9 @@ result_type = "вийде", type, "або", "облом", type ;
 assignment = "перевзувся", place, "тепер", expression ;
 place = IDENT, { ".", IDENT | index } ;
 
-(* "базарь" prints a value or a string literal. *)
+(* "базарь" prints a value or a string literal. A string literal may hold
+   "{…}" parts, each one expression whose value is printed in its place:
+   "базарь \"Разом: {ціна на штук} грн\"". *)
 print_statement = "базарь", ( STRING | expression ) ;
 
 (* "всьо розходимось" exits with an expression result. It is optional and
@@ -477,14 +479,25 @@ I64_MIN_MAGNITUDE = ? digit, { digit } with value 9223372036854775808 ? ;
 (* ---- String literals ----
    A string literal occurs only as the operand of "базарь". It is written
    between double quotes on one line and may hold any Unicode scalar except
-   LF, CR, '"', and "\". Three escapes write LF, the quote, and the backslash:
-   "\n" is LF, '\"' is a double quote, "\\" is a backslash. A backslash
-   before any other character, a line end before the closing quote, and EOF
-   before it are lexical errors. *)
-STRING = '"', { string_char | escape }, '"' ;
+   LF, CR, '"', "\", "{", and "}". Five escapes write LF, the quote, the
+   backslash, and the braces: "\n" is LF, '\"' is a double quote, "\\" is a
+   backslash, "\{" and "\}" are braces. A backslash before any other
+   character, a line end before the closing quote, and EOF before it are
+   lexical errors.
+
+   An interpolation, "{" EXPR "}", holds one expression on the same line.
+   The lexer reads the text between the braces as its own run of tokens,
+   positioned where they stand, and the parser reads them as one
+   expression; "базарь" prints its value there. A quote, a "{", or a line
+   end before the closing "}", empty braces, and a "}" with no "{" are
+   lexical errors. *)
+STRING = '"', { string_char | escape | interpolation }, '"' ;
 string_char = ? any Unicode scalar (valid UTF-8 as defined above), except
-                U+000A LF, U+000D CR, U+0022 '"', and U+005C "\" ? ;
-escape = "\", ( "n" | '"' | "\" ) ;
+                U+000A LF, U+000D CR, U+0022 '"', U+005C "\", U+007B "{",
+                and U+007D "}" ? ;
+escape = "\", ( "n" | '"' | "\" | "{" | "}" ) ;
+interpolation = "{", ? the tokens of one expression, with no '"', "{",
+                  "}", LF, or CR among the characters ?, "}" ;
 
 (* Any other character outside comments and string literals produces a
    lexical error, including "+", "-", "=", ":", "@", emoji, disallowed

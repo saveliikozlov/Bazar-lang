@@ -211,3 +211,16 @@ test("?: the propagation operator after calls, names, and chains", async () => {
   assert.ok((await scopes('базарь "чому?"')).every(([, scope]) => scope !== 'keyword.operator.try.bazar'));
   assert.ok((await scopes('чутки: шо там?')).every(([, scope]) => scope !== 'keyword.operator.try.bazar'));
 });
+
+test("strings: {…} parts are code, \\{ and \\} are escapes", async () => {
+  const tokens = await scopes('базарь "Разом: {ціна плюс 1} грн \\{не код\\}"');
+  const scopeOf = (text) => tokens.find(([t]) => t === text)[1];
+  assert.strictEqual(scopeOf('Разом: '), 'string.quoted.double.bazar');
+  assert.strictEqual(scopeOf('{'), 'punctuation.section.interpolation.begin.bazar');
+  assert.strictEqual(scopeOf('ціна'), 'variable.other.bazar');
+  assert.strictEqual(scopeOf('плюс'), 'keyword.operator.arithmetic.bazar');
+  assert.strictEqual(scopeOf('}'), 'punctuation.section.interpolation.end.bazar');
+  assert.strictEqual(scopeOf('\\{'), 'constant.character.escape.bazar');
+  assert.strictEqual(scopeOf('\\}'), 'constant.character.escape.bazar');
+  assert.ok(tokens.some(([t, scope]) => t.includes('не код') && scope === 'string.quoted.double.bazar'));
+});
