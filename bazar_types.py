@@ -102,6 +102,11 @@ def is_scalar(t):
     return isinstance(t, (IntType, BoolType))
 
 
+def is_aggregate(t):
+    """A type whose values live in memory and are copied as a block: a structure."""
+    return isinstance(t, StructType)
+
+
 def is_comparable(t):
     """A type whose values рівно and не рівно compare."""
     return is_scalar(t)

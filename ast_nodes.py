@@ -83,6 +83,24 @@ class ASTNode:
             stack.extend(reversed(pending))
 
 
+def children(node):
+    """The direct child nodes of a node, whatever its class."""
+    for value in vars(node).values():
+        if isinstance(value, ASTNode):
+            yield value
+        elif isinstance(value, list):
+            yield from (item for item in value if isinstance(item, ASTNode))
+
+
+def walk(node):
+    """The node and everything below it."""
+    stack = [node]
+    while stack:
+        current = stack.pop()
+        yield current
+        stack.extend(children(current))
+
+
 def _flag(value):
     return "true" if value else "false"
 

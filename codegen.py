@@ -13,11 +13,19 @@ Layout of the module:
   main or printf apart from the C runtime;
 * "main", the top-level statements;
 * printf, scanf, write and exit declared without bodies; clang links them
-  against the C library;
+  against the C library, and llvm.memcpy once an object is copied;
 * format strings and string literals as private global constants.
 
-Every variable and parameter lives in an alloca of its function's entry
-block. Objects are values: a load or a store copies the whole structure.
+Every variable lives in an alloca of its function's entry block. A scalar
+(integer or базар) is an SSA value. An object (an aggregate) is never loaded
+or stored as a whole, because LLVM compiles large aggregate values in
+superlinear time: it stays in memory, and its value is copied with
+llvm.memcpy. pointer() gives the memory of an object, emit_into() writes an
+object's value straight into memory that the expression cannot see, and
+snapshot() copies it into a fresh temporary. An object parameter is a pointer
+that the callee only reads; an object result is written through a hidden first
+parameter that points to memory of the caller.
+
 Arithmetic uses the *.with.overflow intrinsics; an overflow, a division by
 zero, or MIN ділити на мінус 1 writes one line to stderr and exits with 1.
 """
@@ -28,9 +36,9 @@ import llvmlite.binding as llvm
 from ast_nodes import (
     AssignmentNode, BinaryNode, BooleanNode, BreakNode, CallNode, CallStatementNode, DeclarationNode,
     ExitNode, FieldAccessNode, FieldAssignmentNode, ForNode, IdentifierNode, IfNode, IntegerNode,
-    MemberCallNode, NewObjectNode, PrintNode, ReadNode, ReturnNode, StringNode, UnaryNode, WhileNode,
+    MemberCallNode, NewObjectNode, PrintNode, ReadNode, ReturnNode, StringNode, UnaryNode, WhileNode, walk,
 )
-from bazar_types import BoolType, IntType, StructType, is_scalar
+from bazar_types import BoolType, IntType, StructType, is_aggregate, is_scalar
 from semantic import FieldInfo
 
 I1, I8, I32, I64 = ir.IntType(1), ir.IntType(8), ir.IntType(32), ir.IntType(64)
@@ -50,6 +58,7 @@ class CodeGenerator:
         self.strings = {}                    # text -> global constant
         self.struct_types = {}
         self.functions = {}                  # FunctionInfo -> ir.Function
+        self.memcpy_function = None          # declared on the first copy of an object
         self.declare_runtime()
         self.declare_structures()
         self.declare_functions()
@@ -80,9 +89,18 @@ class CodeGenerator:
                 self.declare_function(method, f"bz.{structure.name}.{method.name}", [self_pointer])
 
     def declare_function(self, function, name, leading):
-        parameters = leading + [self.lltype(p.type) for p in function.parameters]
-        llvm_type = ir.FunctionType(self.lltype(function.result), parameters)
-        self.functions[function] = ir.Function(self.module, llvm_type, name=name)
+        # An object parameter is a pointer; an object result is written through
+        # a pointer that comes before every other parameter.
+        parameters = leading + [self.argument_lltype(p.type) for p in function.parameters]
+        if is_aggregate(function.result):
+            parameters.insert(0, self.lltype(function.result).as_pointer())
+            result = ir.VoidType()
+        else:
+            result = self.lltype(function.result)
+        self.functions[function] = ir.Function(self.module, ir.FunctionType(result, parameters), name=name)
+
+    def argument_lltype(self, t):
+        return self.lltype(t).as_pointer() if is_aggregate(t) else self.lltype(t)
 
     def lltype(self, t):
         """The LLVM type of a bazar_types.Type."""
@@ -106,6 +124,11 @@ class CodeGenerator:
             self.strings[text] = constant
         return self.strings[text].gep([ir.Constant(I32, 0), ir.Constant(I32, 0)])
 
+    def memcpy(self):
+        if self.memcpy_function is None:
+            self.memcpy_function = self.module.declare_intrinsic("llvm.memcpy", [I8_PTR, I8_PTR, I64])
+        return self.memcpy_function
+
     def generate(self, program):
         for function in self.info.functions.values():
             self.generate_body(function, self.functions[function], None)
@@ -125,6 +148,7 @@ class CodeGenerator:
         self.slots = {}                      # VarInfo -> alloca
         self.loop_ends = []                  # exit block of each enclosing loop, innermost last
         self.self_pointer = None
+        self.result_pointer = None           # where тримай writes an object result
         self.structure = None
 
     def finish_function(self):
@@ -136,12 +160,18 @@ class CodeGenerator:
     def generate_body(self, function, llvm_function, structure):
         self.begin_function(llvm_function)
         arguments = list(llvm_function.args)
+        if is_aggregate(function.result):
+            self.result_pointer = arguments.pop(0)
+            self.result_pointer.name = "result"
         if structure is not None:
             self.self_pointer = arguments.pop(0)
             self.self_pointer.name = "self"
             self.structure = structure
         for parameter, argument in zip(function.parameters, arguments):
             argument.name = parameter.name
+            if is_aggregate(parameter.type):
+                self.slots[parameter] = argument          # read only: a parameter is never assigned
+                continue
             slot = self.alloca(argument.type, parameter.name)
             self.builder.store(argument, slot)
             self.slots[parameter] = slot
@@ -173,13 +203,15 @@ class CodeGenerator:
     def statement(self, node):
         if isinstance(node, DeclarationNode):
             slot = self.alloca(self.lltype(node.info.type), node.name)
-            self.builder.store(self.value(node.initializer), slot)
+            if is_aggregate(node.info.type):
+                self.emit_into(slot, node.initializer)    # the initializer cannot see the new name
+            else:
+                self.builder.store(self.value(node.initializer), slot)
             self.slots[node.info] = slot
         elif isinstance(node, AssignmentNode):
-            self.builder.store(self.value(node.value), self.name_address(node.ref))
+            self.assign(lambda: self.name_address(node.ref), False, node.value)
         elif isinstance(node, FieldAssignmentNode):
-            value = self.value(node.value)
-            self.builder.store(value, self.address(node.target))
+            self.assign(lambda: self.pointer(node.target), has_call(node.target), node.value)
         elif isinstance(node, PrintNode):
             self.print_statement(node.value)
         elif isinstance(node, ExitNode):
@@ -189,9 +221,13 @@ class CodeGenerator:
             self.builder.call(self.printf, [self.string(EXIT_MESSAGE), value])
             self.builder.ret(ir.Constant(I32, 0))
         elif isinstance(node, ReturnNode):
-            self.builder.ret(self.value(node.value))
+            if self.result_pointer is None:
+                self.builder.ret(self.value(node.value))
+            else:
+                self.emit_into(self.result_pointer, node.value)    # memory of the caller
+                self.builder.ret_void()
         elif isinstance(node, CallStatementNode):
-            self.value(node.call)
+            self.operand(node.call)
         elif isinstance(node, IfNode):
             self.if_statement(node)
         elif isinstance(node, WhileNode):
@@ -201,6 +237,23 @@ class CodeGenerator:
         elif isinstance(node, BreakNode):
             self.builder.branch(self.loop_ends[-1])
         # Constant, function, and structure declarations produce no statements.
+
+    def assign(self, target, target_has_call, value_node):
+        """Store value_node at the address that target() computes after the value.
+
+        An object is never built straight into its target: склепай Т(п.у, п.х)
+        assigned to п reads п while it is built. A place is copied directly
+        when nothing runs between reading it and the copy: two places of one
+        type are either the same memory or do not overlap, which memcpy allows."""
+        if not is_aggregate(value_node.type):
+            value = self.value(value_node)
+            self.builder.store(value, target())
+            return
+        if addressable(value_node) and not target_has_call:
+            source = self.pointer(value_node)
+        else:
+            source = self.snapshot(value_node)
+        self.copy(target(), source, value_node.type)
 
     def if_statement(self, node):
         condition = self.value(node.condition)
@@ -265,10 +318,12 @@ class CodeGenerator:
         if isinstance(node, StringNode):
             self.builder.call(self.printf, [self.string("%s\n"), self.string(node.value)])
             return
-        self.print_value(self.value(node), node.type, "", "\n")
+        self.print_value(self.operand(node), node.type, "", "\n")
 
     def print_value(self, value, t, prefix, suffix):
-        """printf prefix, the value, and suffix; objects walk their field table."""
+        """printf prefix, the value, and suffix; objects walk their field table.
+
+        value is an SSA value for a scalar and a pointer for an object."""
         if isinstance(t, IntType):
             self.builder.call(self.printf, [self.string(prefix + INT_FORMATS[t.bits] + suffix), value])
         elif isinstance(t, BoolType):
@@ -276,16 +331,14 @@ class CodeGenerator:
             self.builder.call(self.printf, [self.string(prefix + "%s" + suffix), text])
         elif isinstance(t, StructType):
             structure = self.info.structures[t.name]
-            slot = self.alloca(self.lltype(t))
-            self.builder.store(value, slot)
             opening = f"{prefix}{t.name} {{"
             fields = list(structure.fields.values())
             if not fields:
                 self.builder.call(self.printf, [self.string(opening + "}" + suffix)])
                 return
             for number, field in enumerate(fields):
-                pointer = self.builder.gep(slot, [ir.Constant(I32, 0), ir.Constant(I32, field.index)])
-                field_value = self.builder.load(pointer)
+                pointer = self.element(value, field.index)
+                field_value = pointer if is_aggregate(field.type) else self.builder.load(pointer)
                 separator = opening + " " if number == 0 else ", "
                 closing = " }" + suffix if number == len(fields) - 1 else ""
                 self.print_value(field_value, field.type, f"{separator}{field.name}: ", closing)
@@ -317,43 +370,99 @@ class CodeGenerator:
         if isinstance(node, BinaryNode):
             return self.binary(node)
         if isinstance(node, FieldAccessNode):
-            if self.addressable(node):
-                return self.builder.load(self.address(node), name=node.field)
-            return self.builder.extract_value(self.value(node.object), node.field_info.index)
+            return self.builder.load(self.pointer(node), name=node.field)
+        if isinstance(node, (CallNode, MemberCallNode)):
+            return self.call(node, None)
+        raise AssertionError(f"no scalar code for {type(node).__name__}")
+
+    def operand(self, node):
+        """An SSA value for a scalar expression, a pointer for an object."""
+        return self.pointer(node) if is_aggregate(node.type) else self.value(node)
+
+    # ------------------------------------------------------------ objects
+
+    def pointer(self, node):
+        """The memory of a name, a field, or an object expression.
+
+        Names and fields are borrowed: the pointer is read before anything else
+        runs. Any other object is built in a fresh temporary."""
+        if isinstance(node, IdentifierNode):
+            return self.name_address(node.ref)
+        if isinstance(node, FieldAccessNode):
+            # A field is reached with a gep by its index from the symbol table.
+            return self.element(self.pointer(node.object), node.field_info.index, node.field)
+        return self.snapshot(node)
+
+    def snapshot(self, node):
+        """A fresh temporary holding the value of an object expression."""
+        temporary = self.alloca(self.lltype(node.type))
+        self.emit_into(temporary, node)
+        return temporary
+
+    def emit_into(self, destination, node):
+        """Write the value of an object expression to memory that node cannot see."""
         if isinstance(node, NewObjectNode):
-            # Fields left out take their defaults: the object starts as the
-            # constant built from them, and the given values are inserted.
-            value = self.default_object(node.structure, len(node.arguments))
-            for index, argument in enumerate(node.arguments):
-                value = self.builder.insert_value(value, self.value(argument), index)
-            return value
-        if isinstance(node, CallNode):
-            arguments = [self.value(a) for a in node.arguments]
-            if node.on_self:
-                arguments.insert(0, self.self_pointer)
-            return self.builder.call(self.functions[node.target], arguments)
-        if isinstance(node, MemberCallNode):
-            if self.addressable(node.object):
-                pointer = self.address(node.object)
+            self.build_object(destination, node)
+        elif isinstance(node, (CallNode, MemberCallNode)):
+            self.call(node, destination)
+        else:
+            self.copy(destination, self.pointer(node), node.type)
+
+    def build_object(self, destination, node):
+        """склепай: the given values in field order, then the defaults of the fields left out."""
+        for field in self.info.structures[node.structure].fields.values():
+            pointer = self.element(destination, field.index)
+            if field.index >= len(node.arguments):
+                self.store_default(pointer, field)
+            elif is_aggregate(field.type):
+                self.emit_into(pointer, node.arguments[field.index])
             else:
-                # A temporary object: only a non-mutating call reaches here (semantic rule 24).
-                pointer = self.alloca(self.lltype(node.object.type))
-                self.builder.store(self.value(node.object), pointer)
-            arguments = [pointer] + [self.value(a) for a in node.arguments]
-            return self.builder.call(self.functions[node.target], arguments)
-        raise AssertionError(f"no code for {type(node).__name__}")
+                self.builder.store(self.value(node.arguments[field.index]), pointer)
 
-    def default_object(self, structure_name, given):
-        """A constant object: undef for the first given fields, then the defaults."""
-        fields = list(self.info.structures[structure_name].fields.values())
-        elements = [self.default_value(f) if f.index >= given else ir.Constant(self.lltype(f.type), ir.Undefined)
-                    for f in fields]
-        return ir.Constant(self.struct_types[structure_name], elements)
-
-    def default_value(self, field):
+    def store_default(self, pointer, field):
         if is_scalar(field.type):
-            return ir.Constant(self.lltype(field.type), int(field.default))
-        return self.default_object(field.type.name, 0)
+            self.builder.store(ir.Constant(self.lltype(field.type), int(field.default)), pointer)
+            return
+        for inner in self.info.structures[field.type.name].fields.values():
+            self.store_default(self.element(pointer, inner.index), inner)
+
+    def element(self, pointer, index, name=""):
+        return self.builder.gep(pointer, [ir.Constant(I32, 0), ir.Constant(I32, index)], name=name)
+
+    def copy(self, destination, source, t):
+        size = ir.Constant(self.lltype(t).as_pointer(), None).gep([ir.Constant(I32, 1)]).ptrtoint(I64)
+        self.builder.call(self.memcpy(), [self.builder.bitcast(destination, I8_PTR),
+                                          self.builder.bitcast(source, I8_PTR), size, ir.Constant(I1, 0)])
+
+    # -------------------------------------------------------------- calls
+
+    def call(self, node, destination):
+        """Call a function; an object result is written to destination."""
+        arguments = [] if destination is None else [destination]
+        if isinstance(node, MemberCallNode):
+            # On a temporary object, only a non-mutating call reaches here (semantic rule 24).
+            arguments.append(self.pointer(node.object))
+        elif node.on_self:
+            arguments.append(self.self_pointer)
+        arguments += self.call_arguments(node)
+        return self.builder.call(self.functions[node.target], arguments)
+
+    def call_arguments(self, node):
+        """Argument values in order; an object argument is a pointer the callee only reads.
+
+        A name or field is passed as it is only when nothing can change it during
+        the call: no later argument calls anything, and the callee is not a member
+        function, which may change its own object, as in п.посунь(п)."""
+        values = []
+        for index, (parameter, argument) in enumerate(zip(node.target.parameters, node.arguments)):
+            if not is_aggregate(parameter.type):
+                values.append(self.value(argument))
+            elif (addressable(argument) and node.target.owner is None
+                  and not any(has_call(later) for later in node.arguments[index + 1:])):
+                values.append(self.pointer(argument))
+            else:
+                values.append(self.snapshot(argument))
+        return values
 
     def binary(self, node):
         operator = node.operator
@@ -420,27 +529,24 @@ class CodeGenerator:
 
     # ---------------------------------------------------------- addresses
 
-    def addressable(self, node):
-        """A chain of names and fields that lives in memory, not a temporary."""
-        if isinstance(node, IdentifierNode):
-            return isinstance(node.ref, FieldInfo) or node.ref.kind != "const"
-        if isinstance(node, FieldAccessNode):
-            return self.addressable(node.object)
-        return False
-
     def name_address(self, info):
         if isinstance(info, FieldInfo):          # a field of the own object, inside a member function
-            return self.builder.gep(self.self_pointer, [ir.Constant(I32, 0), ir.Constant(I32, info.index)],
-                                    name=info.name)
+            return self.element(self.self_pointer, info.index, info.name)
         return self.slots[info]
 
-    def address(self, node):
-        if isinstance(node, IdentifierNode):
-            return self.name_address(node.ref)
-        # A field is reached with a gep by its index from the symbol table.
-        base = self.address(node.object)
-        return self.builder.gep(base, [ir.Constant(I32, 0), ir.Constant(I32, node.field_info.index)],
-                                name=node.field)
+
+def addressable(node):
+    """A chain of names and fields that lives in memory, not a temporary."""
+    if isinstance(node, IdentifierNode):
+        return isinstance(node.ref, FieldInfo) or node.ref.kind != "const"
+    if isinstance(node, FieldAccessNode):
+        return addressable(node.object)
+    return False
+
+
+def has_call(node):
+    """Whether evaluating node runs a function, which may change an object."""
+    return any(isinstance(item, (CallNode, MemberCallNode)) for item in walk(node))
 
 
 def generate(program, info):

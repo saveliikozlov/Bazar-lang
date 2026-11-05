@@ -24,7 +24,7 @@ from ast_nodes import (
     AssignmentNode, ASTNode, BinaryNode, BlockNode, BooleanNode, CallNode, CallStatementNode,
     DeclarationNode, ExitNode, FieldAccessNode, FieldAssignmentNode, ForNode, FunctionNode,
     IdentifierNode, IfNode, IntegerNode, MemberCallNode, NewObjectNode, PrintNode, ReturnNode,
-    StructureNode, UnaryNode, WhileNode,
+    StructureNode, UnaryNode, WhileNode, walk,
 )
 from bazar_types import is_integer
 from semantic import VarInfo
@@ -33,24 +33,6 @@ ARITHMETIC = ("add", "sub", "mul", "div")
 
 
 # ---------------------------------------------------------------- tree walks
-
-def children(node):
-    """The direct child nodes of a node, whatever its class."""
-    for value in vars(node).values():
-        if isinstance(value, ASTNode):
-            yield value
-        elif isinstance(value, list):
-            yield from (item for item in value if isinstance(item, ASTNode))
-
-
-def walk(node):
-    """The node and everything below it."""
-    stack = [node]
-    while stack:
-        current = stack.pop()
-        yield current
-        stack.extend(children(current))
-
 
 def contains(node, target):
     return any(item is target for item in walk(node))
