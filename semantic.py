@@ -35,12 +35,11 @@ from dataclasses import dataclass, field
 
 from ast_nodes import (
     ArrayFillNode, ArrayLiteralNode, ArrayTypeNode, AssignmentNode, BinaryNode, BindingPatternNode,
-    BooleanNode, BreakNode, LiteralPatternNode, MatchNode, OrPatternNode, StructurePatternNode,
-    VariantPatternNode, WildcardPatternNode,
-    CallNode, CallStatementNode, ConstantDeclarationNode, DeclarationNode, ExitNode, FieldAccessNode,
-    FieldAssignmentNode, ForEachNode, ForNode, FunctionNode, IdentifierNode, IfNode, IndexNode, IntegerNode,
-    MemberCallNode, NewObjectNode, OptionTypeNode, PrintNode, ReadNode, ResultTypeNode, ReturnNode,
-    StringNode, StructureNode, TryNode, UnaryNode, VariantNode, WhileNode,
+    BooleanNode, BreakNode, CallNode, CallStatementNode, ConstantDeclarationNode, DeclarationNode, ExitNode,
+    FieldAccessNode, FieldAssignmentNode, ForEachNode, ForNode, FunctionNode, IdentifierNode, IfNode,
+    IndexNode, IntegerNode, InterpolationNode, LiteralPatternNode, MatchNode, MemberCallNode, NewObjectNode,
+    OptionTypeNode, OrPatternNode, PrintNode, ReadNode, ResultTypeNode, ReturnNode, StringNode, StructureNode,
+    StructurePatternNode, TryNode, UnaryNode, VariantNode, VariantPatternNode, WhileNode, WildcardPatternNode,
 )
 from bazar_types import (
     BOOL, BUILTIN_TYPES, I32, I64, STRING, ArrayType, OptionType, ResultType, StructType, Type,
@@ -577,6 +576,14 @@ class Analyzer:
         elif isinstance(node, PrintNode):
             if isinstance(node.value, StringNode):
                 node.value.type = STRING
+            elif isinstance(node.value, InterpolationNode):
+                # Rule 48: every {…} part is an expression of any type, printed as базарь prints it.
+                node.value.type = STRING
+                for part in node.value.parts:
+                    if isinstance(part, StringNode):
+                        part.type = STRING
+                    else:
+                        self.expression(part, None, context)
             else:
                 self.expression(node.value, None, context)
         elif isinstance(node, ExitNode):

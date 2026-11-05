@@ -541,6 +541,15 @@ class StringNode(ExprNode):
 
 
 @dataclass
+class InterpolationNode(ExprNode):
+    """A string literal with {EXPR} parts, printed by базарь: StringNode text and expressions, in order."""
+    parts: list[ExprNode]
+
+    def labelled_children(self):
+        return (("parts", self.parts),)
+
+
+@dataclass
 class ReadNode(ExprNode):
     """ану кажи: reads one integer from standard input."""
 

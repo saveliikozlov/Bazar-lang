@@ -12,13 +12,13 @@ from ast_nodes import (
     ArrayFillNode, ArrayLiteralNode, ArrayTypeNode, AssignmentNode, BinaryNode, BindingPatternNode, BlockNode,
     BooleanNode, BreakNode, CallNode, CallStatementNode, ConstantDeclarationNode, DeclarationNode, ExitNode,
     FieldAccessNode, FieldAssignmentNode, FieldNode, ForEachNode, ForNode, FunctionNode, IdentifierNode,
-    IfNode, IndexNode, IntegerNode, LiteralPatternNode, MatchArmNode, MatchNode, MemberCallNode,
-    NamedTypeNode, NewObjectNode, OptionTypeNode, OrPatternNode, ParameterNode, PrintNode, ProgramNode,
-    ReadNode, ResultTypeNode, ReturnNode, StringNode, StructureNode, StructurePatternNode, TryNode, UnaryNode,
-    VariantNode, VariantPatternNode, WhileNode, WildcardPatternNode,
+    IfNode, IndexNode, IntegerNode, InterpolationNode, LiteralPatternNode, MatchArmNode, MatchNode,
+    MemberCallNode, NamedTypeNode, NewObjectNode, OptionTypeNode, OrPatternNode, ParameterNode, PrintNode,
+    ProgramNode, ReadNode, ResultTypeNode, ReturnNode, StringNode, StructureNode, StructurePatternNode,
+    TryNode, UnaryNode, VariantNode, VariantPatternNode, WhileNode, WildcardPatternNode,
 )
 from lexer import (COMMA, DOT, EOF, I64_MIN_MAGNITUDE, IDENT, INTEGER, KEYWORD, KEYWORDS, LBRACKET, LPAREN,
-                   NEWLINE, QUESTION, RBRACKET, RPAREN, SEMICOLON, STRING, lex)
+                   NEWLINE, QUESTION, RBRACE, RBRACKET, RPAREN, SEMICOLON, STRING, lex)
 
 TYPE_NAMES = {"дрібняк": "i32", "крупняк": "i64", "базар": "bool"}
 # The four values of може and вийде, with their canonical AST names.
@@ -333,8 +333,24 @@ class Parser:
         first = self.eat()
         if self.at(STRING):
             token = self.eat()
+            if token.parts:
+                return PrintNode(first.line, first.column, self.interpolation(token))
             return PrintNode(first.line, first.column, StringNode(token.line, token.column, token.text))
         return PrintNode(first.line, first.column, self.parse_expression())
+
+    def interpolation(self, token):
+        """A string with {EXPR} parts: each part is one expression, parsed on its own tokens."""
+        parts = []
+        for kind, content, line, column in token.parts:
+            if kind == "text":
+                parts.append(StringNode(line, column, content))
+                continue
+            inner = Parser(list(content))
+            inner.nesting = self.nesting
+            parts.append(inner.parse_expression())
+            if not inner.at(RBRACE):
+                raise inner.error(f"У «{{…}}» один вираз: після нього чекаю «}}», а тут {describe(inner.peek())}.")
+        return InterpolationNode(token.line, token.column, parts)
 
     def parse_exit_statement(self):
         # "всьо", "розходимось", expression

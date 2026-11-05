@@ -42,9 +42,9 @@ import llvmlite.binding as llvm
 from ast_nodes import (
     ArrayFillNode, ArrayLiteralNode, AssignmentNode, BinaryNode, BindingPatternNode, BooleanNode, BreakNode,
     CallNode, CallStatementNode, DeclarationNode, ExitNode, FieldAccessNode, FieldAssignmentNode, ForEachNode,
-    ForNode, IdentifierNode, IfNode, IndexNode, IntegerNode, LiteralPatternNode, MatchNode, MemberCallNode,
-    NewObjectNode, PrintNode, ReadNode, ReturnNode, StringNode, StructurePatternNode, TryNode, UnaryNode,
-    VariantNode, VariantPatternNode, WhileNode, WildcardPatternNode, walk,
+    ForNode, IdentifierNode, IfNode, IndexNode, IntegerNode, InterpolationNode, LiteralPatternNode, MatchNode,
+    MemberCallNode, NewObjectNode, PrintNode, ReadNode, ReturnNode, StringNode, StructurePatternNode, TryNode,
+    UnaryNode, VariantNode, VariantPatternNode, WhileNode, WildcardPatternNode, walk,
 )
 from bazar_types import (
     ArrayType, BoolType, IntType, is_aggregate, is_scalar, is_variant, OptionType, payloads, ResultType,
@@ -452,23 +452,37 @@ class CodeGenerator:
         if isinstance(node, StringNode):
             self.builder.call(self.printf, [self.string("%s\n"), self.string(node.value)])
             return
+        if isinstance(node, InterpolationNode):
+            # Each value runs just before it is printed, with the text in front of it.
+            text = ""
+            for part in node.parts:
+                if isinstance(part, StringNode):
+                    text += part.value
+                else:
+                    self.print_value(self.operand(part), part.type, text, "")
+                    text = ""
+            self.builder.call(self.printf, [self.string("%s\n"), self.string(text)])
+            return
         self.print_value(self.operand(node), node.type, "", "\n")
 
     def print_value(self, value, t, prefix, suffix):
         """printf prefix, the value, and suffix; objects walk their field table.
 
-        value is an SSA value for a scalar and a pointer for an object."""
+        value is an SSA value for a scalar and a pointer for an object. prefix
+        and suffix are plain text: a % in them is escaped wherever they become
+        part of a printf format."""
         if isinstance(t, IntType):
-            self.builder.call(self.printf, [self.string(prefix + INT_FORMATS[t.bits] + suffix), value])
+            self.builder.call(self.printf, [self.string(literal(prefix) + INT_FORMATS[t.bits] + literal(suffix)),
+                                            value])
         elif isinstance(t, BoolType):
             text = self.builder.select(value, self.string("реально"), self.string("гон"))
-            self.builder.call(self.printf, [self.string(prefix + "%s" + suffix), text])
+            self.builder.call(self.printf, [self.string(literal(prefix) + "%s" + literal(suffix)), text])
         elif isinstance(t, StructType):
             structure = self.info.structures[t.name]
             opening = f"{prefix}{t.name} {{"
             fields = list(structure.fields.values())
             if not fields:
-                self.builder.call(self.printf, [self.string(opening + "}" + suffix)])
+                self.builder.call(self.printf, [self.string(literal(opening + "}" + suffix))])
                 return
             for number, field in enumerate(fields):
                 pointer = self.element(value, field.index)
@@ -881,6 +895,11 @@ class CodeGenerator:
         if isinstance(info, FieldInfo):          # a field of the own object, inside a member function
             return self.element(self.self_pointer, info.index, info.name)
         return self.slots[info]
+
+
+def literal(text):
+    """Text that printf prints as it is, when it stands in a format."""
+    return text.replace("%", "%%")
 
 
 def addressable(node):

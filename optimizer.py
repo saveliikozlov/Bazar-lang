@@ -23,9 +23,9 @@ reports the same position.
 from ast_nodes import (
     ArrayFillNode, ArrayLiteralNode, AssignmentNode, ASTNode, BinaryNode, BindingPatternNode, BlockNode,
     BooleanNode, CallNode, CallStatementNode, DeclarationNode, ExitNode, FieldAccessNode, FieldAssignmentNode,
-    ForEachNode, ForNode, FunctionNode, IdentifierNode, IfNode, IndexNode, IntegerNode, MatchNode,
-    MemberCallNode, NewObjectNode, PrintNode, ReturnNode, StructureNode, TryNode, UnaryNode, VariantNode,
-    WhileNode, walk,
+    ForEachNode, ForNode, FunctionNode, IdentifierNode, IfNode, IndexNode, IntegerNode, InterpolationNode,
+    MatchNode, MemberCallNode, NewObjectNode, PrintNode, ReturnNode, StringNode, StructureNode, TryNode,
+    UnaryNode, VariantNode, WhileNode, walk,
 )
 from semantic import VarInfo, constant_value
 
@@ -259,6 +259,11 @@ def evaluated_parts(node):
         return [] if node.value is None else [node.value]
     if isinstance(node, TryNode):
         return [node.operand]
+    if isinstance(node, InterpolationNode):
+        # Each value is printed as soon as it runs, so only a call in the first
+        # value may run before the statement: a later one would print too early.
+        values = [part for part in node.parts if not isinstance(part, StringNode)]
+        return values[:1]
     return []
 
 

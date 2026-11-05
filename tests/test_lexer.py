@@ -244,6 +244,32 @@ class ArrayTokenTest(unittest.TestCase):
         self.assertEqual(kinds("з розмір".encode()), [IDENT, IDENT, EOF])
 
 
+class InterpolationTokenTest(unittest.TestCase):
+    def test_parts_hold_text_and_positioned_tokens(self):
+        token = lex('базарь "a {х плюс 1} b"'.encode())[1]
+        self.assertEqual(token.kind, STRING)
+        self.assertEqual(token.text, "a  b")
+        first, middle, last = token.parts
+        self.assertEqual(first, ("text", "a ", 1, 15))
+        kind, tokens, line, column = middle
+        self.assertEqual((kind, line, column), ("expression", 1, 18))
+        self.assertEqual([(t.kind, t.text, t.column) for t in tokens],
+                         [(IDENT, "х", 18), (KEYWORD, "плюс", 21), (INTEGER, "1", 30),
+                          ("rbrace", "}", 31), (EOF, "", 31)])
+        self.assertEqual(last, ("text", " b", 1, 32))
+
+    def test_escaped_braces_are_text(self):
+        token = lex('"\\{х\\}"'.encode())[0]
+        self.assertEqual((token.text, token.parts), ("{х}", ()))
+
+    def test_brace_errors_are_positioned(self):
+        for source, column in (('"х}"', 4), ('"{}"', 2), ('"{х"', 2), ('"{{х}}"', 3), ('"{х + 1}"', 6)):
+            with self.subTest(source=source):
+                with self.assertRaises(LexError) as context:
+                    lex(source.encode())
+                self.assertEqual(context.exception.column, column)
+
+
 class StageTwoTokenTest(unittest.TestCase):
     def test_comma_and_dot(self):
         self.assertEqual(kinds("п.х(1, 2)".encode()),
@@ -256,7 +282,7 @@ class StageTwoTokenTest(unittest.TestCase):
         self.assertEqual(token, Token(STRING, 'а"б\\в\nг', 1, 14))
 
     def test_string_may_hold_any_scalar_but_line_end(self):
-        self.assertEqual(lex('"чутки: 😎 + - ; {}"'.encode())[0].text, "чутки: 😎 + - ; {}")
+        self.assertEqual(lex('"чутки: 😎 + - ; \\{\\}"'.encode())[0].text, "чутки: 😎 + - ; {}")
         self.assertEqual(lex(b'""')[0], Token(STRING, "", 1, 1))
 
     def test_string_errors(self):

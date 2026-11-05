@@ -1,0 +1,35 @@
+ProgramNode line=2 column=1
+  DeclarationNode line=2 column=1 name=ціна type=i64 mutable=false
+    initializer:
+      IntegerNode line=2 column=53 value=25
+  DeclarationNode line=3 column=1 name=м type=[i32; 2] mutable=false
+    initializer:
+      ArrayLiteralNode line=3 column=52
+        elements:
+          IntegerNode line=3 column=53 value=1
+          IntegerNode line=3 column=56 value=2
+  PrintNode line=4 column=1
+    value:
+      InterpolationNode line=4 column=14
+        parts:
+          StringNode line=4 column=15 value="Разом: "
+          BinaryNode line=4 column=37 operator=mul
+            left:
+              IdentifierNode line=4 column=28 name=ціна
+            right:
+              IntegerNode line=4 column=42 value=4
+          StringNode line=4 column=44 value=" грн, перший: "
+          IndexNode line=4 column=70
+            object:
+              IdentifierNode line=4 column=68 name=м
+            index:
+              IntegerNode line=4 column=71 value=0
+          IndexNode line=4 column=77
+            object:
+              IdentifierNode line=4 column=75 name=м
+            index:
+              IntegerNode line=4 column=78 value=1
+          StringNode line=4 column=81 value="%"
+  PrintNode line=5 column=1
+    value:
+      StringNode line=5 column=14 value="дужки {ціна} без виразу"

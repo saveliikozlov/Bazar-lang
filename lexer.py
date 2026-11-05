@@ -4,8 +4,14 @@ Two machines cooperate in one byte-by-byte pass:
 * the UTF-8 machine validates all bytes, including comments, and assembles
   Unicode scalar values from multibyte sequences;
 * the token machine (START, WORD, APOSTROPHE, INTEGER, STRING, ESCAPE,
-  COMMENT, CR) receives each scalar and its first-byte offset, then emits
-  tokens.
+  INTERPOLATION, COMMENT, CR) receives each scalar and its first-byte offset,
+  then emits tokens.
+
+A string literal may hold {EXPR} parts. Each part is lexed on its own, with
+its tokens positioned where they stand in the line, and the STRING token
+lists its pieces in .parts: ("text", value, line, column) and
+("expression", tokens, line, column), whose tokens end with an RBRACE token
+at the closing "}" and an EOF token. A string without parts has parts ().
 
 No regular expressions, str.split(), or lexer generators are used. Words
 are read completely before keyword lookup, so keywords never match prefixes.
@@ -34,6 +40,7 @@ LBRACKET = "lbracket"
 RBRACKET = "rbracket"
 SEMICOLON = "semicolon"
 QUESTION = "question"
+RBRACE = "rbrace"            # only at the end of the tokens of a {…} part
 NEWLINE = "newline"
 EOF = "eof"
 
@@ -80,15 +87,16 @@ COMMA_CHAR, DOT_CHAR, QUOTE, BACKSLASH = 0x2C, 0x2E, 0x22, 0x5C
 PUNCTUATION = {COMMA_CHAR: (COMMA, ","), DOT_CHAR: (DOT, "."), 0x5B: (LBRACKET, "["), 0x5D: (RBRACKET, "]"),
                0x3B: (SEMICOLON, ";"), 0x3F: (QUESTION, "?")}
 # The character after a backslash inside a string literal, and what it means.
-ESCAPES = {0x6E: "\n", QUOTE: '"', BACKSLASH: "\\"}
+LEFT_BRACE, RIGHT_BRACE = 0x7B, 0x7D
+ESCAPES = {0x6E: "\n", QUOTE: '"', BACKSLASH: "\\", LEFT_BRACE: "{", RIGHT_BRACE: "}"}
 BYTE_ORDER_MARK = 0xFEFF
 # Ukrainian apostrophe inside a name: ASCII ' and U+02BC modifier letter apostrophe.
 APOSTROPHES = frozenset((0x27, 0x02BC))
 APOSTROPHE_MESSAGE = "Апостроф ставлять тільки між літерами, як у «з'їзд»."
 
 # Token state machine states.
-START, WORD, APOSTROPHE, NUMBER, STRING_BODY, ESCAPE, COMMENT, AFTER_CR = (
-    "START", "WORD", "APOSTROPHE", "INTEGER", "STRING", "ESCAPE", "COMMENT", "CR")
+START, WORD, APOSTROPHE, NUMBER, STRING_BODY, ESCAPE, INTERPOLATION, COMMENT, AFTER_CR = (
+    "START", "WORD", "APOSTROPHE", "INTEGER", "STRING", "ESCAPE", "INTERPOLATION", "COMMENT", "CR")
 
 
 @dataclass(frozen=True)
@@ -97,6 +105,7 @@ class Token:
     text: str
     line: int
     column: int
+    parts: tuple = ()        # STRING with {…}: its text and expression pieces
 
 
 class LexError(Exception):
@@ -149,7 +158,10 @@ class Lexer:
         self.token_column = 1
         self.after_letter = False    # WORD: was the previous scalar a letter?
         self.apostrophe_offset = 0
-        self.string_chars = []       # STRING: decoded characters so far
+        self.string_chars = []       # STRING: decoded characters of the current text piece
+        self.string_parts = []       # STRING: finished pieces, see the module docstring
+        self.piece_offset = 0        # STRING: where the current text piece began
+        self.brace_offset = 0        # INTERPOLATION: the opening "{"
         self.escape_offset = 0
 
     # -------------------------------------------------- UTF-8 state machine
@@ -255,6 +267,8 @@ class Lexer:
                 if cp == QUOTE:
                     self.begin(STRING_BODY, offset)
                     self.string_chars = []
+                    self.string_parts = []
+                    self.piece_offset = offset + 1
                     return
                 if cp in APOSTROPHES:
                     raise self.error_at(offset, APOSTROPHE_MESSAGE)
@@ -311,13 +325,40 @@ class Lexer:
                                    "Рядок не закритий: лапку відкрив, а закриваючої «\"» до кінця рядка нема.")
                 if cp == QUOTE:
                     # The token text is the decoded value, escapes resolved.
-                    self.emit(STRING, "".join(self.string_chars))
+                    if not self.string_parts:
+                        self.emit(STRING, "".join(self.string_chars))
+                        return
+                    self.finish_piece()
+                    text = "".join(part[1] for part in self.string_parts if part[0] == "text")
+                    self.tokens.append(Token(STRING, text, self.token_line, self.token_column,
+                                             tuple(self.string_parts)))
+                    self.state = START
                     return
                 if cp == BACKSLASH:
                     self.state = ESCAPE
                     self.escape_offset = offset
                     return
+                if cp == LEFT_BRACE:
+                    self.finish_piece()
+                    self.state = INTERPOLATION
+                    self.brace_offset = offset
+                    return
+                if cp == RIGHT_BRACE:
+                    raise self.error_at(offset, "Самотня «}» у рядку: щоб надрукувати дужку, пиши «\\}».")
                 self.string_chars.append(chr(cp))
+                return
+
+            if state == INTERPOLATION:
+                # {EXPR}: no line end, quote, or brace inside; the part is lexed on its own.
+                if cp is None or cp == LF or cp == CR or cp == QUOTE:
+                    raise self.error_at(self.brace_offset, "Дужку «{» у рядку не закрито: після виразу "
+                                                           "чекаю «}» ще до кінця рядка й лапки.")
+                if cp == LEFT_BRACE:
+                    raise self.error_at(offset, "Дужки «{…}» у рядку не вкладаються одна в одну.")
+                if cp == RIGHT_BRACE:
+                    self.string_parts.append(self.interpolation(self.brace_offset + 1, offset))
+                    self.state = STRING_BODY
+                    self.piece_offset = offset + 1
                 return
 
             if state == ESCAPE:
@@ -326,7 +367,8 @@ class Lexer:
                     self.state = STRING_BODY
                     return
                 raise self.error_at(self.escape_offset,
-                                    "Шо за «\\» такий? У рядку можна тільки «\\n», «\\\"» або «\\\\».")
+                                    "Шо за «\\» такий? У рядку можна тільки «\\n», «\\\"», «\\\\», "
+                                    "«\\{» або «\\}».")
 
             if state == COMMENT:
                 if cp is None or cp == LF or cp == CR:
@@ -342,6 +384,28 @@ class Lexer:
             self.new_line(offset + 1)
             self.state = START
             return
+
+    def finish_piece(self):
+        """Close the current text piece of a string, if it holds any text."""
+        if self.string_chars:
+            column = self.piece_offset - self.line_start + 1
+            self.string_parts.append(("text", "".join(self.string_chars), self.line, column))
+        self.string_chars = []
+
+    def interpolation(self, start, end):
+        """The {…} part from byte start to end: its own tokens, positioned in this line."""
+        if not self.data[start:end].strip(b" \t"):
+            raise self.error_at(start - 1, "Порожні дужки «{}» у рядку: між ними має бути вираз. "
+                                           "Саму дужку пиши «\\{».")
+        shift = start - self.line_start         # columns of the part start at its first byte
+        try:
+            tokens = Lexer(self.data[start:end]).run()
+        except LexError as error:
+            raise LexError(self.line, error.column + shift, error.message) from None
+        tokens = [Token(t.kind, t.text, self.line, t.column + shift, t.parts) for t in tokens[:-1]]
+        closing = end - self.line_start + 1
+        tokens += [Token(RBRACE, "}", self.line, closing), Token(EOF, "", self.line, closing)]
+        return ("expression", tuple(tokens), self.line, start - self.line_start + 1)
 
     def begin(self, state, offset):
         self.state = state
