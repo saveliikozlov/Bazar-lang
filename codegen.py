@@ -26,9 +26,9 @@ from llvmlite import ir
 import llvmlite.binding as llvm
 
 from ast_nodes import (
-    AssignmentNode, BinaryNode, BooleanNode, CallNode, CallStatementNode, DeclarationNode, ExitNode,
-    FieldAccessNode, FieldAssignmentNode, IdentifierNode, IfNode, IntegerNode, MemberCallNode,
-    NewObjectNode, PrintNode, ReadNode, ReturnNode, StringNode, UnaryNode,
+    AssignmentNode, BinaryNode, BooleanNode, BreakNode, CallNode, CallStatementNode, DeclarationNode,
+    ExitNode, FieldAccessNode, FieldAssignmentNode, ForNode, IdentifierNode, IfNode, IntegerNode,
+    MemberCallNode, NewObjectNode, PrintNode, ReadNode, ReturnNode, StringNode, UnaryNode, WhileNode,
 )
 from semantic import FieldInfo
 
@@ -115,6 +115,7 @@ class CodeGenerator:
         body = llvm_function.append_basic_block("body")
         self.builder = ir.IRBuilder(body)
         self.slots = {}                      # VarInfo -> alloca
+        self.loop_ends = []                  # exit block of each enclosing loop, innermost last
         self.self_pointer = None
         self.structure = None
 
@@ -185,6 +186,12 @@ class CodeGenerator:
             self.value(node.call)
         elif isinstance(node, IfNode):
             self.if_statement(node)
+        elif isinstance(node, WhileNode):
+            self.while_statement(node)
+        elif isinstance(node, ForNode):
+            self.for_statement(node)
+        elif isinstance(node, BreakNode):
+            self.builder.branch(self.loop_ends[-1])
         # Constant, function, and structure declarations produce no statements.
 
     def if_statement(self, node):
@@ -200,6 +207,48 @@ class CodeGenerator:
             self.statements(body.statements)
             if not self.builder.block.is_terminated:
                 self.builder.branch(end_block)
+        self.builder.position_at_end(end_block)
+
+    def loop_body(self, body, end_block, next_block):
+        """Generate a loop body; falling off its end continues at next_block."""
+        self.loop_ends.append(end_block)
+        self.statements(body.statements)
+        self.loop_ends.pop()
+        if not self.builder.block.is_terminated:
+            self.builder.branch(next_block)
+
+    def while_statement(self, node):
+        cond_block = self.new_block("while.cond")
+        body_block = self.new_block("while.body")
+        end_block = self.new_block("while.end")
+        self.builder.branch(cond_block)
+        self.builder.position_at_end(cond_block)
+        self.builder.cbranch(self.value(node.condition), body_block, end_block)
+        self.builder.position_at_end(body_block)
+        self.loop_body(node.body, end_block, cond_block)      # the back edge
+        self.builder.position_at_end(end_block)
+
+    def for_statement(self, node):
+        # The counter is compared with the end before it grows, never after, so
+        # a range ending at the largest value of the type stops without overflow.
+        start = self.value(node.start)
+        end = self.value(node.end)
+        slot = self.alloca(start.type, node.name)
+        self.slots[node.info] = slot
+        self.builder.store(start, slot)
+        body_block = self.new_block("for.body")
+        step_block = self.new_block("for.step")
+        next_block = self.new_block("for.next")
+        end_block = self.new_block("for.end")
+        self.builder.cbranch(self.builder.icmp_signed("<=", start, end), body_block, end_block)
+        self.builder.position_at_end(body_block)
+        self.loop_body(node.body, end_block, step_block)
+        self.builder.position_at_end(step_block)
+        counter = self.builder.load(slot, name=node.name)
+        self.builder.cbranch(self.builder.icmp_signed("==", counter, end), end_block, next_block)
+        self.builder.position_at_end(next_block)
+        self.builder.store(self.builder.add(counter, ir.Constant(counter.type, 1), flags=["nsw"]), slot)
+        self.builder.branch(body_block)                       # the back edge
         self.builder.position_at_end(end_block)
 
     # -------------------------------------------------------------- print
