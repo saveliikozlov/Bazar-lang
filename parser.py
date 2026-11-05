@@ -9,16 +9,16 @@ the final byte.
 """
 
 from ast_nodes import (
-    ArrayFillNode, ArrayLiteralNode, ArrayTypeNode, AssignmentNode, BinaryNode, BlockNode, BooleanNode,
-    BreakNode, CallNode, CallStatementNode, ConstantDeclarationNode, DeclarationNode, ExitNode,
+    ArrayFillNode, ArrayLiteralNode, ArrayTypeNode, AssignmentNode, BinaryNode, BindingPatternNode, BlockNode,
+    BooleanNode, BreakNode, CallNode, CallStatementNode, ConstantDeclarationNode, DeclarationNode, ExitNode,
     FieldAccessNode, FieldAssignmentNode, FieldNode, ForEachNode, ForNode, FunctionNode, IdentifierNode,
-    BindingPatternNode, IfNode, IndexNode, LiteralPatternNode, MatchArmNode, MatchNode, OrPatternNode,
-    StructurePatternNode, VariantPatternNode, WildcardPatternNode, IntegerNode, MemberCallNode, NamedTypeNode, NewObjectNode, OptionTypeNode,
-    ParameterNode, PrintNode, ProgramNode, ReadNode, ResultTypeNode, ReturnNode, StringNode, StructureNode,
-    UnaryNode, VariantNode, WhileNode,
+    IfNode, IndexNode, IntegerNode, LiteralPatternNode, MatchArmNode, MatchNode, MemberCallNode,
+    NamedTypeNode, NewObjectNode, OptionTypeNode, OrPatternNode, ParameterNode, PrintNode, ProgramNode,
+    ReadNode, ResultTypeNode, ReturnNode, StringNode, StructureNode, StructurePatternNode, TryNode, UnaryNode,
+    VariantNode, VariantPatternNode, WhileNode, WildcardPatternNode,
 )
 from lexer import (COMMA, DOT, EOF, I64_MIN_MAGNITUDE, IDENT, INTEGER, KEYWORD, KEYWORDS, LBRACKET, LPAREN,
-                   NEWLINE, RBRACKET, RPAREN, SEMICOLON, STRING, lex)
+                   NEWLINE, QUESTION, RBRACKET, RPAREN, SEMICOLON, STRING, lex)
 
 TYPE_NAMES = {"дрібняк": "i32", "крупняк": "i64", "базар": "bool"}
 # The four values of може and вийде, with their canonical AST names.
@@ -213,7 +213,7 @@ class Parser:
                 raise self.error("«Отакої» без «якшо реально»? Закривати нічого: спочатку відкрий базар.")
             if token.text == "порішали":
                 raise self.error("«Порішали» без «маю дєло» чи «такі діла»? Закривати нічого.")
-        if token.kind == IDENT and self.tokens[self.index + 1].kind in (LPAREN, DOT, LBRACKET):
+        if token.kind == IDENT and self.tokens[self.index + 1].kind in (LPAREN, DOT, LBRACKET, QUESTION):
             return self.parse_call_statement()
         raise self.unexpected("інструкцію: оголошення, «перевзувся», «якшо реально», "
                               "«базарь» або «всьо розходимось»")
@@ -353,7 +353,10 @@ class Parser:
         # IDENT, { [ arguments ], ".", IDENT }, arguments
         first = self.peek()
         call = self.parse_chain()
-        if not isinstance(call, (CallNode, MemberCallNode)):
+        inner = call
+        while isinstance(inner, TryNode):    # запиши(х)? passes on нема or облом
+            inner = inner.operand
+        if not isinstance(inner, (CallNode, MemberCallNode)):
             raise self.error("Саме ім'я чи поле — це не інструкція. Окремим рядком можна "
                              "тільки виклик, наприклад «п.посунь(1)».", first)
         return CallStatementNode(first.line, first.column, call)
@@ -829,6 +832,9 @@ class Parser:
         if not minuses and token.kind == INTEGER and node.value == I64_MIN_MAGNITUDE:
             raise self.error(f"Число {I64_MIN_MAGNITUDE} не влазить навіть у «крупняк»: "
                              f"так можна писати тільки «мінус {I64_MIN_MAGNITUDE}».", token)
+        while self.at(QUESTION):             # шось(5)?, (з)?; a chain takes its own
+            mark = self.eat()
+            node = TryNode(mark.line, mark.column, node)
         for operator in reversed(minuses):
             node = UnaryNode(operator.line, operator.column, "neg", node)
         return node
@@ -884,15 +890,19 @@ class Parser:
         return NewObjectNode(first.line, first.column, name.text, self.parse_arguments())
 
     def parse_chain(self):
-        # IDENT, [ arguments ], { ".", IDENT, [ arguments ] | "[", expression, "]" }
+        # IDENT, [ arguments ], { ".", IDENT, [ arguments ] | "[", expression, "]" | "?" }
         name = self.eat()
         if self.at(LPAREN):
             node = CallNode(name.line, name.column, name.text, self.parse_arguments())
         else:
             node = IdentifierNode(name.line, name.column, name.text)
-        while self.at(DOT) or self.at(LBRACKET):
+        while self.at(DOT) or self.at(LBRACKET) or self.at(QUESTION):
             if self.at(LBRACKET):
                 node = self.parse_index(node)
+                continue
+            if self.at(QUESTION):
+                mark = self.eat()
+                node = TryNode(mark.line, mark.column, node)
                 continue
             self.eat()
             if self.at_keyword(*VARIANTS):

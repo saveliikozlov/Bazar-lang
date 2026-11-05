@@ -422,11 +422,14 @@ class ReturnNode(StmtNode):
 
 @dataclass
 class CallStatementNode(StmtNode):
-    """A call on its own line; call is a CallNode or a MemberCallNode."""
+    """A call on its own line; call is a CallNode or a MemberCallNode, maybe inside TryNode."""
     call: ExprNode
 
     def attributes(self):
-        return (("member_call", _flag(isinstance(self.call, MemberCallNode))),)
+        call = self.call
+        while isinstance(call, TryNode):           # запиши(х)? is still a call
+            call = call.operand
+        return (("member_call", _flag(isinstance(call, MemberCallNode))),)
 
     def labelled_children(self):
         return (("call", self.call),)
@@ -637,6 +640,15 @@ class VariantNode(ExprNode):
 
     def labelled_children(self):
         return () if self.value is None else (("value", self.value),)
+
+
+@dataclass
+class TryNode(ExprNode):
+    """OPERAND?: what шось or вийшло holds; нема or облом leaves the function. Positioned at "?"."""
+    operand: ExprNode
+
+    def labelled_children(self):
+        return (("operand", self.operand),)
 
 
 @dataclass

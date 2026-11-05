@@ -40,7 +40,7 @@ from ast_nodes import (
     CallNode, CallStatementNode, ConstantDeclarationNode, DeclarationNode, ExitNode, FieldAccessNode,
     FieldAssignmentNode, ForEachNode, ForNode, FunctionNode, IdentifierNode, IfNode, IndexNode, IntegerNode,
     MemberCallNode, NewObjectNode, OptionTypeNode, PrintNode, ReadNode, ResultTypeNode, ReturnNode,
-    StringNode, StructureNode, UnaryNode, VariantNode, WhileNode,
+    StringNode, StructureNode, TryNode, UnaryNode, VariantNode, WhileNode,
 )
 from bazar_types import (
     BOOL, BUILTIN_TYPES, I32, I64, STRING, ArrayType, OptionType, ResultType, StructType, Type,
@@ -877,6 +877,8 @@ class Analyzer:
             return self.index_type(node, context)
         if isinstance(node, VariantNode):
             return self.variant_type(node, expected, context)
+        if isinstance(node, TryNode):
+            return self.try_type(node, context)
         if isinstance(node, ArrayLiteralNode):
             return self.array_literal_type(node, expected, context)
         if isinstance(node, ArrayFillNode):
@@ -932,6 +934,26 @@ class Analyzer:
                               f"вкажи тип через «тіпа».")
         self.require(node.value, expected.ok if node.variant == "ok" else expected.error, context)
         return expected
+
+    def try_type(self, node, context):
+        # Rule 47: з? is what шось or вийшло holds. Inside a function, нема or облом
+        # leaves it, so the function must return that same kind of value; in the
+        # main program they stop the program.
+        held = self.expression(node.operand, None, context)
+        if not isinstance(held, (OptionType, ResultType)):
+            raise error(node, f"«?» розпаковує тільки «може» або «вийде», а тут «{word(held)}».")
+        function = context.function
+        if function is not None:
+            result = function.result
+            if isinstance(held, OptionType) and not isinstance(result, OptionType):
+                raise error(node, f"«?» при «нема» вертає «нема» з функції, тож {function.describe()} "
+                                  f"має віддавати «може …», а віддає «{word(result)}».")
+            if isinstance(held, ResultType) and not (isinstance(result, ResultType)
+                                                     and result.error == held.error):
+                raise error(node, f"«?» при «облом» вертає його з функції, тож {function.describe()} "
+                                  f"має віддавати «вийде … або облом {held.error.word}», "
+                                  f"а віддає «{word(result)}».")
+        return held.inner if isinstance(held, OptionType) else held.ok
 
     def fallback_type(self, node, expected, context):
         """з або x: what з holds, or x when it holds nothing; або on базар stays logical OR."""

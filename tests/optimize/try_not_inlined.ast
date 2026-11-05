@@ -1,0 +1,46 @@
+ProgramNode line=2 column=1
+  FunctionNode line=2 column=1 name=подвоєне result=Option<i32>
+    parameters:
+      ParameterNode line=2 column=34 name=з type=Option<i32>
+    body:
+      BlockNode line=3 column=5
+        ReturnNode line=3 column=5
+          value:
+            VariantNode line=3 column=18 variant=some
+              value:
+                BinaryNode line=3 column=31 operator=mul
+                  left:
+                    TryNode line=3 column=29
+                      operand:
+                        IdentifierNode line=3 column=27 name=з
+                  right:
+                    IntegerNode line=3 column=36 value=2
+  PrintNode line=8 column=1
+    value:
+      CallNode line=8 column=14 name=подвоєне
+        arguments:
+          VariantNode line=8 column=31 variant=none
+  DeclarationNode line=9 column=14 name=х.плюс_один.1 type=i32 mutable=false
+    initializer:
+      IntegerNode line=9 column=32 value=4
+  DeclarationNode line=6 column=5 name=результат.плюс_один.1 type=Option<i32> mutable=false
+    initializer:
+      VariantNode line=6 column=18 variant=some
+        value:
+          BinaryNode line=6 column=30 operator=add
+            left:
+              IdentifierNode line=6 column=27 name=х.плюс_один.1
+            right:
+              IntegerNode line=6 column=39 value=1
+  PrintNode line=9 column=1
+    value:
+      BinaryNode line=9 column=36 operator=mul
+        left:
+          TryNode line=9 column=34
+            operand:
+              IdentifierNode line=9 column=14 name=результат.плюс_один.1
+        right:
+          IntegerNode line=9 column=41 value=10
+  PrintNode line=10 column=1
+    value:
+      StringNode line=10 column=14 value="кінець"

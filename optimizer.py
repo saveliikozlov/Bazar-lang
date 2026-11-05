@@ -21,10 +21,11 @@ reports the same position.
 """
 
 from ast_nodes import (
-    ArrayFillNode, ArrayLiteralNode, AssignmentNode, ASTNode, BinaryNode, BlockNode, BooleanNode, CallNode,
-    CallStatementNode, DeclarationNode, ExitNode, FieldAccessNode, FieldAssignmentNode, ForEachNode, ForNode,
-    BindingPatternNode, FunctionNode, IdentifierNode, IfNode, IndexNode, IntegerNode, MatchNode,
-    MemberCallNode, NewObjectNode, PrintNode, ReturnNode, StructureNode, UnaryNode, VariantNode, WhileNode, walk,
+    ArrayFillNode, ArrayLiteralNode, AssignmentNode, ASTNode, BinaryNode, BindingPatternNode, BlockNode,
+    BooleanNode, CallNode, CallStatementNode, DeclarationNode, ExitNode, FieldAccessNode, FieldAssignmentNode,
+    ForEachNode, ForNode, FunctionNode, IdentifierNode, IfNode, IndexNode, IntegerNode, MatchNode,
+    MemberCallNode, NewObjectNode, PrintNode, ReturnNode, StructureNode, TryNode, UnaryNode, VariantNode,
+    WhileNode, walk,
 )
 from semantic import VarInfo, constant_value
 
@@ -198,8 +199,12 @@ def can_inline(function):
     """The shape that is inlined: a top-level function that leaves only by its last line.
 
     A member function uses the fields of its object, and a тримай anywhere else
-    would need a jump out of the middle of the caller's code."""
+    would need a jump out of the middle of the caller's code. So would a ?, which
+    returns нема or облом from the function: moved into the caller, it would
+    leave the caller instead."""
     if function.owner is not None:
+        return False
+    if any(isinstance(item, TryNode) for item in walk(function.node.body)):
         return False
     statements = function.node.body.statements
     if not isinstance(statements[-1], ReturnNode):
@@ -252,6 +257,8 @@ def evaluated_parts(node):
         return [node.value]
     if isinstance(node, VariantNode):
         return [] if node.value is None else [node.value]
+    if isinstance(node, TryNode):
+        return [node.operand]
     return []
 
 

@@ -225,7 +225,7 @@ class TokenTest(unittest.TestCase):
         self.assertEqual(lex(b"x12")[0], Token(IDENT, "x12", 1, 1))
 
     def test_rejects_other_characters(self):
-        for bad in "+-*/=!<>:@?\"'{}\x00\x0b\x0c\x7f":
+        for bad in "+-*/=!<>:@\"'{}\x00\x0b\x0c\x7f":
             with self.subTest(bad=bad):
                 with self.assertRaises(LexError):
                     lex(bad.encode())

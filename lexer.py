@@ -33,6 +33,7 @@ DOT = "dot"
 LBRACKET = "lbracket"
 RBRACKET = "rbracket"
 SEMICOLON = "semicolon"
+QUESTION = "question"
 NEWLINE = "newline"
 EOF = "eof"
 
@@ -77,7 +78,7 @@ COLON, LEFT_PAREN, RIGHT_PAREN, UNDERSCORE = 0x3A, 0x28, 0x29, 0x5F
 COMMA_CHAR, DOT_CHAR, QUOTE, BACKSLASH = 0x2C, 0x2E, 0x22, 0x5C
 # Single-character punctuation tokens, apart from "(" and ")".
 PUNCTUATION = {COMMA_CHAR: (COMMA, ","), DOT_CHAR: (DOT, "."), 0x5B: (LBRACKET, "["), 0x5D: (RBRACKET, "]"),
-               0x3B: (SEMICOLON, ";")}
+               0x3B: (SEMICOLON, ";"), 0x3F: (QUESTION, "?")}
 # The character after a backslash inside a string literal, and what it means.
 ESCAPES = {0x6E: "\n", QUOTE: '"', BACKSLASH: "\\"}
 BYTE_ORDER_MARK = 0xFEFF

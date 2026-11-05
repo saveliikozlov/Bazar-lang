@@ -173,5 +173,18 @@ class MatchAnnotationTest(unittest.TestCase):
               "        тримай 1\n    випадок гон\n        тримай 0\n    розібрали\nпорішали")
 
 
+
+class TryAnnotationTest(unittest.TestCase):
+    def test_try_gives_what_is_held(self):
+        program, _ = check("маю дєло ф(з тіпа може [дрібняк; 2], р тіпа вийде базар або облом дрібняк) "
+                           "на виході вийде крупняк або облом дрібняк\n"
+                           "    зуб даю б тіпа базар це р?\n    тримай вийшло(5)\nпорішали\n"
+                           "зуб даю м тіпа може [дрібняк; 2] це нема\nбазарь м?[0]")
+        function = program.statements[0]
+        self.assertEqual(function.body.statements[0].initializer.type, BOOL)
+        printed = program.statements[2].value
+        self.assertEqual((printed.object.type, printed.type), (ArrayType(I32, 2), I32))
+
+
 if __name__ == "__main__":
     unittest.main()

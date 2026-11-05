@@ -40,14 +40,15 @@ from llvmlite import ir
 import llvmlite.binding as llvm
 
 from ast_nodes import (
-    ArrayFillNode, ArrayLiteralNode, AssignmentNode, BinaryNode, BooleanNode, BreakNode, CallNode,
-    CallStatementNode, DeclarationNode, ExitNode, FieldAccessNode, FieldAssignmentNode, ForEachNode, ForNode,
-    BindingPatternNode, IdentifierNode, IfNode, IndexNode, IntegerNode, LiteralPatternNode, MatchNode,
-    StructurePatternNode, VariantPatternNode, WildcardPatternNode, MemberCallNode, NewObjectNode, PrintNode, ReadNode,
-    ReturnNode, StringNode, UnaryNode, VariantNode, WhileNode, walk,
+    ArrayFillNode, ArrayLiteralNode, AssignmentNode, BinaryNode, BindingPatternNode, BooleanNode, BreakNode,
+    CallNode, CallStatementNode, DeclarationNode, ExitNode, FieldAccessNode, FieldAssignmentNode, ForEachNode,
+    ForNode, IdentifierNode, IfNode, IndexNode, IntegerNode, LiteralPatternNode, MatchNode, MemberCallNode,
+    NewObjectNode, PrintNode, ReadNode, ReturnNode, StringNode, StructurePatternNode, TryNode, UnaryNode,
+    VariantNode, VariantPatternNode, WhileNode, WildcardPatternNode, walk,
 )
 from bazar_types import (
-    ArrayType, BoolType, IntType, OptionType, StructType, is_aggregate, is_scalar, is_variant, payloads,
+    ArrayType, BoolType, IntType, is_aggregate, is_scalar, is_variant, OptionType, payloads, ResultType,
+    StructType,
 )
 from semantic import FieldInfo, is_name_chain
 
@@ -441,7 +442,8 @@ class CodeGenerator:
         body(index)
         following = self.builder.add(index, ir.Constant(I64, 1))
         self.builder.store(following, slot)
-        self.builder.cbranch(self.builder.icmp_signed("==", following, ir.Constant(I64, stop)), end_block, body_block)
+        done = self.builder.icmp_signed("==", following, ir.Constant(I64, stop))
+        self.builder.cbranch(done, end_block, body_block)
         self.builder.position_at_end(end_block)
 
     # -------------------------------------------------------------- print
@@ -543,6 +545,8 @@ class CodeGenerator:
             return self.builder.load(self.pointer(node), name=node.field)
         if isinstance(node, IndexNode):
             return self.builder.load(self.pointer(node))
+        if isinstance(node, TryNode):
+            return self.builder.load(self.unwrap(node))
         if isinstance(node, (CallNode, MemberCallNode)):
             return self.call(node, None)
         raise AssertionError(f"no scalar code for {type(node).__name__}")
@@ -570,7 +574,33 @@ class CodeGenerator:
         if isinstance(node, IndexNode):
             array = self.pointer(node.object)
             return self.builder.gep(array, [ir.Constant(I32, 0), self.checked_index(node)])
+        if isinstance(node, TryNode):
+            return self.unwrap(node)
         return self.snapshot(node)
+
+    def unwrap(self, node):
+        """з?: a pointer to what шось or вийшло holds, after the tag says it holds one.
+
+        Otherwise a function writes нема, or облом with its error, to its
+        result and returns; the main program stops with a run-time error."""
+        held_type = node.operand.type
+        container = self.pointer(node.operand)
+        held_block = self.new_block("try.held")
+        other_block = self.new_block("try.other")
+        self.builder.cbranch(self.builder.load(self.element(container, 0)), held_block, other_block)
+        self.builder.position_at_end(other_block)
+        if self.result_pointer is None:
+            # Only the main program: the semantic pass allows ? in a function
+            # only when its result is може or вийде, which has a result pointer.
+            got, wanted = ("нема", "шось") if isinstance(held_type, OptionType) else ("облом", "вийшло")
+            self.stop(node, f"«?» отримав «{got}» замість «{wanted}»")
+        else:
+            self.builder.store(ir.Constant(I1, 0), self.element(self.result_pointer, 0))
+            if isinstance(held_type, ResultType):
+                self.copy(self.element(self.result_pointer, 2), self.element(container, 2), held_type.error)
+            self.builder.ret_void()
+        self.builder.position_at_end(held_block)
+        return self.element(container, 1)
 
     def checked_index(self, node):
         """The index as i64; one unknown before the run is compared with the length.
@@ -834,12 +864,16 @@ class CodeGenerator:
         ok_block = self.new_block("ok")
         self.builder.cbranch(condition, fail_block, ok_block)
         self.builder.position_at_end(fail_block)
+        self.stop(node, message)
+        self.builder.position_at_end(ok_block)
+
+    def stop(self, node, message):
+        """Write one run-time error line for node to stderr and exit with 1; ends the block."""
         text = f"помилка виконання: line {node.line}:{node.column}: {message}\n"
         self.builder.call(self.write, [ir.Constant(I32, 2), self.string(text),
                                        ir.Constant(I64, len(text.encode("utf-8")))])
         self.builder.call(self.exit, [ir.Constant(I32, 1)])
         self.builder.unreachable()
-        self.builder.position_at_end(ok_block)
 
     # ---------------------------------------------------------- addresses
 
