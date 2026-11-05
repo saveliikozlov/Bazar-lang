@@ -314,10 +314,11 @@ See [README.md](README.md#ast-dump-format) for the `compiler.py --ast` dump form
   The dump is streamed line by line; its indentation still makes the output
   of a very deep chain grow quadratically.
 - The entire file is read into memory.
-- Variables, arrays among them, live on the stack of the running program. An
-  array of millions of elements can exceed the stack (often 8 MB) and crash
-  the program; a copy that the program makes for a moment, such as an
-  argument, needs room too.
+- A value of 1 KiB or more, such as a large array, lives on the heap of the
+  running program, so its size is limited by memory, not by the stack. When
+  memory runs out, the program stops with a run-time error. One array value
+  takes at most 2^40 bytes (1 TiB); larger ones are compilation errors.
+  Deep recursion can still exhaust the stack.
 
 ## 8. Features absent from this version
 

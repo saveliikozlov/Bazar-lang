@@ -410,7 +410,11 @@ way took 14 seconds. They stay in memory instead. A copy is one call to
 reads, and an array or object result is written through a hidden first
 parameter that points to memory of the caller. Filling, printing, comparing,
 and `крутимось … з` are loops at run time, so compiling a program takes the
-same time whatever the sizes of its arrays. This is the code for
+same time whatever the sizes of its arrays. A value of 1 KiB or more does not
+live on the stack, which is often only 8 MB: its function allocates it once on
+the heap and frees it before every `ret`, so arrays of millions of elements
+work, and running out of memory is a run-time error, not a crash. This is the
+code for
 `перевзувся м[к] тепер 5`, where `м` is a `[дрібняк; 3]` and `к` a `дрібняк`:
 
 ```llvm
@@ -753,11 +757,14 @@ that follows it and one in `tests/invalid` that breaks it (named in brackets).
     statement sees the constants its expressions see (rules 5–7), unless a
     variable hides the name. An array may be the type of a variable, a
     parameter, a result, a field, or an element, but not of a constant, and
-    an array field has no `це` [`arrays_types_and_literals` /
+    an array field has no `це`. Nested lengths multiply, and one array value
+    may take at most 2^40 bytes (1 TiB) [`arrays_types_and_literals`,
+    `arrays_huge` /
     `array_size_zero`, `array_size_negative`, `array_size_not_constant`,
     `array_size_bool`, `array_size_call`,
     `array_size_constant_declared_below`, `array_size_constant_shadowed`,
-    `array_constant`, `array_field_default`].
+    `array_constant`, `array_field_default`, `array_too_large`,
+    `array_of_structures_too_large`].
 34. `[a, b, c]` has at least one element, all of one type; the length and
     the element type are part of its type, so `[дрібняк; 2]` is not a
     `[дрібняк; 3]`. An expected array type gives its element type to literals
@@ -912,9 +919,12 @@ text the compiler writes is `str(module)`.
   bodies and linked by `clang`. Format strings are private global constants.
   Printing an object walks the field table with one `gep`, `load`, and
   `printf` per field, so a new structure prints without new compiler code.
+  A run-time error calls `fflush(NULL)` before it writes to stderr, so what
+  the program printed before it appears first.
 - **Variables** are allocas in the function's entry block, so a loop body that
-  declares a variable does not grow the stack. Arithmetic uses the
-  `llvm.s*.with.overflow` intrinsics.
+  declares a variable does not grow the stack. A value of 1 KiB or more is
+  allocated there with `malloc` instead and freed before every `ret`.
+  Arithmetic uses the `llvm.s*.with.overflow` intrinsics.
 - **Loops** are basic blocks with a back edge; see [Loops in the IR](#loops-in-the-ir).
 
 ## Optimizer
@@ -1119,8 +1129,8 @@ exits nonzero if any did:
 | Folder | Count | Check |
 | --- | --- | --- |
 | `tests/valid` | 56 | `--ast` output equals `NAME.ast` (front-end tests; some Stage 1 ones use undeclared names on purpose); with `--optimize`, it equals `NAME.optimized.ast` when the optimizer changes the tree, or `NAME.optimized.err` for the 16 that stop in the semantic pass |
-| `tests/invalid` | 347 | compiling exits 1, prints exactly `NAME.err`, and writes no file |
-| `tests/run` | 44 | end to end: compiled, run with `lli` (or built with `llc` and `clang`), stdout equals `NAME.expected`; `NAME.in` is stdin; `NAME.error` is the expected run-time error |
+| `tests/invalid` | 349 | compiling exits 1, prints exactly `NAME.err`, and writes no file |
+| `tests/run` | 45 | end to end: compiled, run with `lli` (or built with `llc` and `clang`), stdout equals `NAME.expected`; `NAME.in` is stdin; `NAME.error` is the expected run-time error |
 | `examples` | 15 | compiling succeeds |
 | `programs` | 3 sessions | built with `llc` and `clang`; the native binary's stdout equals the session's `.expected` |
 | `tests/optimize` | 14 | `--optimize --ast` output equals `NAME.ast`, and stdout equals `NAME.expected` with and without the flag; `NAME.in` and `NAME.error` as in `tests/run` |
@@ -1128,8 +1138,8 @@ exits nonzero if any did:
 The `tests/valid`, `tests/invalid`, `tests/run`, `examples`, and `programs` checks each run twice, without the flag and with `--optimize`. In `tests/valid`, 29 trees are unchanged by the optimizer and still equal `NAME.ast`; 11 change (unused declarations and functions removed, `покажи` inlined), and their trees are in `NAME.optimized.ast`; 16 deliberately use undeclared names, so they stop in the semantic pass before the optimizer and print the same error as without the flag, pinned in `NAME.optimized.err`.
 
 LLVM tools are looked up in `$LLVM_BIN`, then on `PATH`, then in the
-Homebrew folders. The 134 unit tests cover the lexer, the parser, the type
-values, the exhaustiveness algorithm, the semantic pass's symbol table and annotations, and the CLI.
+Homebrew folders. The 137 unit tests cover the lexer, the parser, the type
+values, the exhaustiveness algorithm, where generated code keeps its slots, the semantic pass's symbol table and annotations, and the CLI.
 
 ## VS Code extension
 
