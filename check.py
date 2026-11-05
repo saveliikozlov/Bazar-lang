@@ -123,7 +123,7 @@ def run_program(module, stdin, cwd):
     if not (llc and clang):
         return "нема ні lli, ні llc з clang: задай LLVM_BIN"
     obj, binary = Path(cwd) / "program.o", Path(cwd) / "program"
-    for command in ([llc, "-filetype=obj", str(module), "-o", str(obj)], [clang, str(obj), "-o", str(binary)]):
+    for command in ([llc, "-relocation-model=pic", "-filetype=obj", str(module), "-o", str(obj)], [clang, str(obj), "-o", str(binary)]):
         built = subprocess.run(command, capture_output=True, timeout=60)
         if built.returncode != 0:
             return f"{Path(command[0]).name} впав: {show(built.stderr)}"
@@ -194,7 +194,10 @@ def main():
                 continue
             for source in sources:
                 total += 1
-                problem = check(source, cwd)
+                try:
+                    problem = check(source, cwd)
+                except subprocess.TimeoutExpired:
+                    problem = "не вклався в час: схоже, цикл ніколи не докрутиться"
                 name = source.relative_to(ROOT).as_posix()
                 if problem is None:
                     report(f"PASS   {name}")
