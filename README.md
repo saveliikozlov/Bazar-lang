@@ -7,7 +7,8 @@ variable, `мутна тєма` a mutable one, and `перевзувся` assign
 Conditions start with `якшо реально`, may have an `а нє` branch, and end with
 `отакої`. Loops start with `крутимось` and end with `докрутились`. Functions
 start with `маю дєло`, structures with `такі діла`, and both end with
-`порішали`. Source files use `.bazar`.
+`порішали`. Fixed-size arrays have types like `[дрібняк; 5]` and are filled
+with `[всюди 0]`. Source files use `.bazar`.
 
 The compiler reads UTF-8 source, checks lexical and syntactic structure,
 runs a semantic pass over the AST, and generates LLVM IR through the
@@ -80,6 +81,7 @@ writes one line to stderr and exits with 1:
 | `крупняк` | signed 64-bit integer (`i64`) | −9223372036854775808 … 9223372036854775807 |
 | `базар` | Boolean (`bool`) | `реально` (true), `гон` (false) |
 | a structure name | an object of a `такі діла` structure | its fields |
+| `[TYPE; SIZE]` | a fixed-size array of SIZE elements of TYPE | SIZE from 1 to 2147483647 |
 
 A declaration always has a name, a type after `тіпа`, and an initial value
 after `це`.
@@ -118,7 +120,7 @@ override precedence.
 
 | Operators | Meaning | Associativity |
 | --- | --- | --- |
-| `.` field, `.f(…)` member call, `f(…)` call | access and calls | left |
+| `.` field, `.f(…)` member call, `f(…)` call, `[і]` element | access and calls | left |
 | unary `мінус` | numeric negation | right |
 | `на`, `ділити на` | multiplication, integer division | left |
 | `плюс`, `мінус` | addition, subtraction | left |
@@ -351,6 +353,75 @@ The defaults are a constant built at compile time, so `склепай Коло()
 costs no instructions at run time. See also the [VS Code
 extension](#vs-code-extension).
 
+## Extra feature: arrays
+
+An array holds a fixed number of values of one type. Its type is
+`[ELEMENT; SIZE]`, where SIZE is a constant expression from 1 to 2147483647
+that may use constants. `[1, 2, 3]` lists the elements, and `[всюди 0]`
+("everywhere") repeats one value: its length comes from the array type
+expected there. `м[і]` is an element, counted from 0, and `м.розмір` is the
+length.
+
+```text
+желєзобетонно Н тіпа дрібняк це 3
+мутна тєма м тіпа [дрібняк; Н] це [10, 20, 30]
+мутна тєма сітка тіпа [[дрібняк; 2]; 2] це [[1, 2], [всюди 0]]
+перевзувся м[0] тепер м[1] плюс м[2]
+перевзувся сітка[1][0] тепер м.розмір
+базарь м
+базарь сітка
+базарь м рівно [50, 20, 30]
+крутимось ціна тіпа дрібняк з м
+    базарь ціна
+докрутились
+```
+
+This prints `[50, 20, 30]`, `[[1, 2], [3, 0]]`, `реально`, and then `50`, `20`,
+and `30` on separate lines. `крутимось ціна тіпа дрібняк з м` gives the counter
+every element in turn. Like `від` and `по`, the word `з` means this only in a
+loop header and stays an ordinary name elsewhere; `всюди` is the one new
+reserved word. Arrays are values like objects: a declaration, an argument, a
+result, or an assignment copies the whole array. `рівно` and `не рівно`
+compare arrays element by element. An index known at compile time must be
+inside the array; any other is checked when the program runs:
+
+```text
+помилка виконання: line 3:17: номер за межами масиву: тут можна від 0 до 2
+```
+
+See [examples/arrays.bazar](examples/arrays.bazar), which sorts prices read
+from standard input.
+
+### Arrays and objects in the IR
+
+An array is an LLVM array type, `[3 x i32]`. Arrays and objects are never
+loaded or stored as whole values, because LLVM compiles those in time that
+grows faster than the size of the value: copying a 50 000-element array that
+way took 14 seconds. They stay in memory instead. A copy is one call to
+`llvm.memcpy`, an array or object parameter is a pointer the callee only
+reads, and an array or object result is written through a hidden first
+parameter that points to memory of the caller. Filling, printing, comparing,
+and `крутимось … з` are loops at run time, so compiling a program takes the
+same time whatever the sizes of its arrays. This is the code for
+`перевзувся м[к] тепер 5`, where `м` is a `[дрібняк; 3]` and `к` a `дрібняк`:
+
+```llvm
+  %"к.1" = load i32, i32* %"к"
+  %".19" = sext i32 %"к.1" to i64
+  %".20" = icmp uge i64 %".19", 3
+  br i1 %".20", label %"fail", label %"ok"
+fail:
+  %".22" = call i64 @"write"(i32 2, i8* getelementptr ([124 x i8], [124 x i8]* @"str.1", i32 0, i32 0), i64 123)
+  call void @"exit"(i32 1)
+  unreachable
+ok:
+  %".25" = getelementptr [3 x i32], [3 x i32]* %"м", i32 0, i64 %".19"
+  store i32 5, i32* %".25"
+```
+
+One unsigned comparison catches both a negative index and one past the end.
+An index known at compile time has no check.
+
 ## Semantic rules
 
 The semantic pass ([semantic.py](semantic.py)) runs on the AST before code
@@ -398,8 +469,9 @@ that follows it and one in `tests/invalid` that breaks it (named in brackets).
 
 9. There is no implicit conversion between `дрібняк`, `крупняк`, and
    `базар`. Arithmetic needs two integers of one type; `більше` and `менше`
-   compare integers; `рівно` and `не рівно` compare two integers or two
-   Booleans of one type, never objects; a condition is a `базар`
+   compare integers; `рівно` and `не рівно` compare two integers, two
+   Booleans, or two arrays of them of one type, never objects; a condition
+   is a `базар`
    [`semantic_mixed_integer_widths`, `semantic_arithmetic_on_bool`,
    `semantic_condition_not_bool`, `semantic_compare_objects`].
 10. Integer literals and `ану кажи` take their type from context; with no
@@ -420,9 +492,10 @@ that follows it and one in `tests/invalid` that breaks it (named in brackets).
 14. `всьо розходимось` takes an integer and is allowed only in the main
     program [`exit_stops_the_program` / `semantic_exit_inside_function`,
     `semantic_exit_with_bool`].
-15. A structure may be the type of a variable, a parameter, a result, or a
-    field, but cannot contain itself, directly or through other fields
-    [`semantic_structure_contains_itself`].
+15. A structure may be the type of a variable, a parameter, a result, a
+    field, or an array element, but cannot contain itself, directly or
+    through other fields and arrays [`semantic_structure_contains_itself`,
+    `array_structure_contains_itself`].
 16. `склепай Т(…)` names an existing structure and gives values of the field
     types in field order; fields left out need a default
     [`auto_constructor` / `semantic_new_object_wrong_value_type`,
@@ -431,7 +504,8 @@ that follows it and one in `tests/invalid` that breaks it (named in brackets).
     function with that name [`semantic_unknown_field`,
     `semantic_unknown_method`, `semantic_field_of_integer`].
 18. Objects are values: a declaration, an argument, a result, or an
-    assignment copies the whole object [`objects_are_copied`].
+    assignment copies the whole object, and no copy shares memory with the
+    original [`objects_are_copied`, `objects_in_memory_never_alias`].
 
 **Mutability**
 
@@ -459,8 +533,9 @@ that follows it and one in `tests/invalid` that breaks it (named in brackets).
 **Output and overflow**
 
 23. `базарь` prints integers in decimal, Booleans as `реально` or `гон`,
-    strings as written, and an object as its type and its fields:
-    `Коло { центр: Точка { х: 1, у: 2 }, радіус: 5 }`. Every `базарь` ends
+    strings as written, an object as its type and its fields:
+    `Коло { центр: Точка { х: 1, у: 2 }, радіус: 5 }`, and an array as its
+    elements: `[1, 2, 3]`. Every `базарь` ends
     with one newline; a `\n` inside a string adds another
     [`print_objects_nested`, `print_strings_and_bools`].
 24. `всьо розходимось N` prints `Всьо, розходимось: N` on its own line and
@@ -469,7 +544,8 @@ that follows it and one in `tests/invalid` that breaks it (named in brackets).
     fit no type, the semantic pass rejects literals and constant values that
     do not fit their type, and the generated code checks `плюс`, `мінус`,
     `на`, `ділити на`, and negation at run time. Division truncates toward
-    zero; dividing by zero or `MIN ділити на мінус 1` is a run-time error
+    zero; dividing by zero or `MIN ділити на мінус 1` is a run-time error,
+    and so is an array index out of range (rule 35)
     [`runtime_overflow`, `runtime_division_by_zero`,
     `semantic_constant_overflow`, `semantic_constant_division_by_zero`].
 
@@ -506,6 +582,54 @@ that follows it and one in `tests/invalid` that breaks it (named in brackets).
     `тримай` and `всьо розходимось` may leave from inside a loop
     [`loop_leaves_function_and_program` / `loop_function_needs_return_after`].
 
+**Arrays**
+
+33. In `[T; N]`, N is a constant integer expression from 1 to 2147483647.
+    It may name constants: a signature or a field sees every constant, and a
+    statement sees the constants its expressions see (rules 5–7), unless a
+    variable hides the name. An array may be the type of a variable, a
+    parameter, a result, a field, or an element, but not of a constant, and
+    an array field has no `це` [`arrays_types_and_literals` /
+    `array_size_zero`, `array_size_negative`, `array_size_not_constant`,
+    `array_size_bool`, `array_size_call`,
+    `array_size_constant_declared_below`, `array_size_constant_shadowed`,
+    `array_constant`, `array_field_default`].
+34. `[a, b, c]` has at least one element, all of one type; the length and
+    the element type are part of its type, so `[дрібняк; 2]` is not a
+    `[дрібняк; 3]`. An expected array type gives its element type to literals
+    inside. `[всюди x]` needs an expected array type, from a declaration, an
+    assignment, an argument, a result, or an enclosing literal; `x` runs once
+    [`arrays_basics` / `array_literal_empty`, `array_literal_mixed_types`,
+    `array_literal_length_mismatch`, `array_literal_element_too_big`,
+    `array_fill_without_type`, `array_fill_wrong_element`,
+    `array_whole_wrong_length`].
+35. `м[і]` needs an array and an integer of either width. An index known at
+    compile time (literals, constants, `розмір`, and arithmetic on them) must
+    be from 0 to the length minus 1; any other index out of range stops the
+    program with a run-time error and exit code 1 [`arrays_index_out_of_range`,
+    `arrays_negative_index` / `array_index_constant_out_of_range`,
+    `array_index_negative_constant`, `array_index_length_out_of_range`,
+    `array_index_not_integer`, `array_index_not_array`].
+36. `м.розмір` is the length, known at compile time. It takes an integer type
+    from context like a literal, but without context it is `дрібняк`. It
+    cannot be assigned, and an array has no other field [`arrays_basics` /
+    `array_length_assigned`, `array_no_such_field`].
+37. `перевзувся м[і].х тепер …` needs a chain that is mutable at every step,
+    as in rule 20; an element is as mutable as its array. Arrays are values,
+    like objects (rule 18). `рівно` and `не рівно` compare arrays of comparable
+    elements element by element; arithmetic, `більше`, `менше`, and
+    `всьо розходимось` take no arrays [`arrays_are_values` /
+    `array_element_of_immutable`, `array_element_wrong_type`,
+    `array_compare_structures`, `array_arithmetic`, `array_exit_value`].
+38. `крутимось е тіпа T з м` needs an array whose element type is exactly T.
+    The array is evaluated once, before the first pass, and cannot see the
+    counter; the loop walks that value, so changing `м` in the body changes
+    no pass. The counter is each element in turn, cannot be assigned, and is
+    scoped like a range loop's counter (rules 28, 30, 31)
+    [`arrays_for_each` / `array_for_each_counter_type`,
+    `array_for_each_not_array`, `array_for_each_counter_assigned`,
+    `array_for_each_fill`].
+
 ## Code generation
 
 [codegen.py](codegen.py) builds the module with `llvmlite.ir`; the only IR
@@ -514,6 +638,8 @@ text the compiler writes is `str(module)`.
 - **Structures**: an identified struct type `bz.Точка` per structure. An
   object is an alloca of it; a field is reached with a `gep` by the field's
   index from the symbol table.
+- **Arrays and objects** stay in memory and are copied with `llvm.memcpy`;
+  see [Arrays and objects in the IR](#arrays-and-objects-in-the-ir).
 - **Functions**: `bz.NAME` per function and `bz.Точка.NAME` per member
   function, whose first parameter is a pointer to the object. Every function
   is declared before any body, so forward calls resolve. The `bz.` prefix
@@ -704,7 +830,8 @@ flags: `FunctionNode` its `result` and `parameters` (each with a `type`),
 `MemberCallNode` their `arguments`, and `CallStatementNode`
 `member_call=true` when the chain ends in a member call. A list prints its
 items under the label, or `label: []` when empty. Types are `i32`, `i64`,
-`bool`, or a structure name.
+`bool`, a structure name, or an array type with its size as written in the
+source, such as `[[i32; 3]; Н плюс 1]`.
 
 ## Tests
 
@@ -720,18 +847,18 @@ exits nonzero if any did:
 
 | Folder | Count | Check |
 | --- | --- | --- |
-| `tests/valid` | 49 | `--ast` output equals `NAME.ast` (front-end tests; some Stage 1 ones use undeclared names on purpose); with `--optimize`, it equals `NAME.optimized.ast` when the optimizer changes the tree, or `NAME.optimized.err` for the 16 that stop in the semantic pass |
-| `tests/invalid` | 231 | compiling exits 1, prints exactly `NAME.err`, and writes no file |
-| `tests/run` | 29 | end to end: compiled, run with `lli` (or built with `llc` and `clang`), stdout equals `NAME.expected`; `NAME.in` is stdin; `NAME.error` is the expected run-time error |
-| `examples` | 10 | compiling succeeds |
+| `tests/valid` | 52 | `--ast` output equals `NAME.ast` (front-end tests; some Stage 1 ones use undeclared names on purpose); with `--optimize`, it equals `NAME.optimized.ast` when the optimizer changes the tree, or `NAME.optimized.err` for the 16 that stop in the semantic pass |
+| `tests/invalid` | 269 | compiling exits 1, prints exactly `NAME.err`, and writes no file |
+| `tests/run` | 36 | end to end: compiled, run with `lli` (or built with `llc` and `clang`), stdout equals `NAME.expected`; `NAME.in` is stdin; `NAME.error` is the expected run-time error |
+| `examples` | 11 | compiling succeeds |
 | `programs` | 3 sessions | built with `llc` and `clang`; the native binary's stdout equals the session's `.expected` |
-| `tests/optimize` | 8 | `--optimize --ast` output equals `NAME.ast`, and stdout equals `NAME.expected` with and without the flag; `NAME.in` and `NAME.error` as in `tests/run` |
+| `tests/optimize` | 10 | `--optimize --ast` output equals `NAME.ast`, and stdout equals `NAME.expected` with and without the flag; `NAME.in` and `NAME.error` as in `tests/run` |
 
-The `tests/valid`, `tests/invalid`, `tests/run`, `examples`, and `programs` checks each run twice, without the flag and with `--optimize`. In `tests/valid`, 22 trees are unchanged by the optimizer and still equal `NAME.ast`; 11 change (unused declarations and functions removed, `покажи` inlined), and their trees are in `NAME.optimized.ast`; 16 deliberately use undeclared names, so they stop in the semantic pass before the optimizer and print the same error as without the flag, pinned in `NAME.optimized.err`.
+The `tests/valid`, `tests/invalid`, `tests/run`, `examples`, and `programs` checks each run twice, without the flag and with `--optimize`. In `tests/valid`, 25 trees are unchanged by the optimizer and still equal `NAME.ast`; 11 change (unused declarations and functions removed, `покажи` inlined), and their trees are in `NAME.optimized.ast`; 16 deliberately use undeclared names, so they stop in the semantic pass before the optimizer and print the same error as without the flag, pinned in `NAME.optimized.err`.
 
 LLVM tools are looked up in `$LLVM_BIN`, then on `PATH`, then in the
-Homebrew folders. The 100 unit tests cover the lexer, the parser, the semantic
-pass's symbol table and annotations, and the CLI.
+Homebrew folders. The 118 unit tests cover the lexer, the parser, the type
+values, the semantic pass's symbol table and annotations, and the CLI.
 
 ## VS Code extension
 
@@ -762,6 +889,7 @@ grammar.ebnf  LANGUAGE.md  EXAMPLES.md  README.md  requirements.txt
 lexer.py       byte-oriented lexer state machine
 parser.py      recursive-descent parser, one method per grammar rule
 ast_nodes.py   AST classes and stable dump
+bazar_types.py the resolved types: integers, базар, structures, arrays
 semantic.py    semantic pass and symbol table
 optimizer.py   the transformations behind --optimize
 codegen.py     LLVM IR through the llvmlite builder

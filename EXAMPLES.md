@@ -215,3 +215,59 @@ Add the numbers from 1 to 10, stopping early once the counter passes 5:
 
 This prints `15`. See also [examples/loop_countdown.bazar](examples/loop_countdown.bazar)
 and [examples/loop_primes.bazar](examples/loop_primes.bazar).
+
+## Arrays — [examples/arrays.bazar](examples/arrays.bazar)
+
+Read the prices of five stalls, sort a copy, and add them up:
+
+```text
+желєзобетонно ЛОТКІВ тіпа дрібняк це 5
+
+маю дєло виручка(ціни тіпа [крупняк; ЛОТКІВ]) на виході крупняк
+    мутна тєма сума тіпа крупняк це 0
+    крутимось ціна тіпа крупняк з ціни
+        перевзувся сума тепер сума плюс ціна
+    докрутились
+    тримай сума
+порішали
+
+мутна тєма ціни тіпа [крупняк; ЛОТКІВ] це [всюди 0]
+крутимось к тіпа дрібняк від 0 по ЛОТКІВ мінус 1
+    перевзувся ціни[к] тепер ану кажи
+докрутились
+```
+
+The example file adds `відсортовані`, which takes the array by value, sorts
+its own copy, and returns it, so `ціни` keeps the order it was read in. With
+input `30 10 50 20 40` the program prints:
+
+```text
+[10, 20, 30, 40, 50]
+Найдешевше й найдорожче:
+10
+50
+Всьо, розходимось: 150
+```
+
+Common array errors, each reported when compiling:
+
+```text
+зуб даю м тіпа [дрібняк; 3] це [1, 2]
+```
+
+`[дрібняк; 2]` is not a `[дрібняк; 3]`: the length is part of the type.
+
+```text
+базарь [всюди 0]
+```
+
+`всюди` takes its length from the expected type, and nothing is expected here.
+
+```text
+зуб даю м тіпа [дрібняк; 3] це [1, 2, 3]
+базарь м[3]
+```
+
+An index known at compile time must be from 0 to 2. An index computed at run
+time is checked then, and the program stops with
+`помилка виконання: … номер за межами масиву: тут можна від 0 до 2`.

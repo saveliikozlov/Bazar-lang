@@ -577,7 +577,7 @@ class Analyzer:
         self.check_statements(node.body.statements, Context(context.function, scope, in_loop=True))
 
     def check_for_each(self, node, context):
-        # Rule 29: the array is checked outside the counter's scope, and the counter
+        # Rule 38: the array is checked outside the counter's scope, and the counter
         # holds each element in turn; it has the element type and cannot be assigned.
         element_type = self.resolve_type(node.declared_type, context)
         if isinstance(node.array, ArrayLiteralNode):
@@ -716,7 +716,7 @@ class Analyzer:
             if isinstance(object_type, ArrayType):
                 if node.field != LENGTH:
                     raise error(node, f"У масиву нема поля «{node.field}»: є тільки «{LENGTH}».")
-                # Rule 30: a constant, typed like an integer literal; дрібняк without context.
+                # Rule 36: a constant, typed like an integer literal; дрібняк without context.
                 node.field_info = None
                 node.length = object_type.length
                 return expected if is_integer(expected) else I32
@@ -754,7 +754,7 @@ class Analyzer:
         raise error(node, "Такий вираз тут не канає.")
 
     def index_type(self, node, context):
-        # Rule 31: an integer index; one known now must be inside the array.
+        # Rule 35: an integer index; one known now must be inside the array.
         array_type = self.expression(node.object, None, context)
         if not isinstance(array_type, ArrayType):
             raise error(node, f"«{word(array_type)}» — не масив, номером у нього не ткнеш.")
