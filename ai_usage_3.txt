@@ -24,10 +24,10 @@ My messages from the start of the assignment work, as I sent them (typos
 kept). Earlier messages in the same session only set up the environment
 (getting the course materials from Moodle, cloning the repository, installing
 my VS Code extension), and later messages only concerned how to write this
-file, the format of the commit messages and final checks. Those are not listed;
-no code or design came from them. During that setup Claude read the
-specification and recommended Loops as the feature, which I then chose in
-prompt 1.
+file, the format of the commit messages, final checks and a question about the
+grade to expect. Those are not listed; no code or design came from them.
+During that setup Claude read the specification and recommended Loops as the
+feature, which I then chose in prompt 1.
 
  1. "Okay, now we can talk about additional features. First of all, I really
     want to implement loops. This is really important for our language and for
@@ -51,6 +51,8 @@ prompt 1.
     We should just optimize code by removing the unused variable in our code
     from memory."
  5. "Yes, you may comit the optimizer"
+ 6. "make tests/valid run with --optimize"
+ 7. "OK, you can commit and add that prompth of mine into ai usage"
 
 PARTS OF THE WORK: WHAT WAS TAKEN, WHAT WAS CHANGED AND WHY
 ----------------------------------------------------------
@@ -97,6 +99,12 @@ PARTS OF THE WORK: WHAT WAS TAKEN, WHAT WAS CHANGED AND WHY
    value could stop the program with an overflow or a division by zero, because
    removing it would change the output, and that reading a variable to assign it
    to itself counts as a read.
+   Later (prompt 6) Claude made check.py also run tests/valid with --optimize,
+   which it had first run only without the flag. Taken as Claude wrote it: the
+   check, the README text and 27 expectation files. Claude read each of the 11
+   trees the optimizer changes before saving them as NAME.optimized.ast; the 16
+   fixtures that use undeclared names stop in the semantic pass with the same
+   error as without the flag, saved as NAME.optimized.err.
 
 7. Task 3: the program (programs/bank.txt, its sessions, check.py)
    My choice of program (prompt 3). Taken as Claude wrote it: the program, its
