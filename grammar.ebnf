@@ -65,6 +65,7 @@ statement = immutable_declaration
           | call_statement
           | if_statement
           | loop_statement
+          | match_statement
           | break_statement ;
 
 (* "зуб даю" declares an immutable variable: it is assigned exactly once,
@@ -153,6 +154,40 @@ for_each_loop = "крутимось", IDENT, "тіпа", type, EACH_FROM, expres
                 "докрутились" ;
 EACH_FROM = ? an IDENT token whose text is exactly з ? ;
 
+(* "розбери" ("sort it out") evaluates its value once and runs the body of
+   the first "випадок" ("case") whose pattern matches it; "розібрали"
+   ("sorted out") closes the match on its own line. Each arm header occupies
+   one line and its body is a block. The semantic stage requires the arms to
+   cover every value, each arm to match something no arm above it does, and
+   the patterns to fit the type of the value. *)
+match_statement = "розбери", expression, NEWLINE,
+                  { NEWLINE },
+                  arm, { arm },
+                  "розібрали" ;
+
+(* A guard, "якшо реально" and a базар, lets the arm run only when it is
+   true; an arm with a guard does not count toward covering every value. *)
+arm = "випадок", pattern, [ "якшо", "реально", expression ], NEWLINE, block ;
+
+(* Alternatives joined by "або" match when any one does; they bind no names. *)
+pattern = pattern_alternative, { "або", pattern_alternative } ;
+
+(* WILDCARD matches anything. Any other IDENT binds the matched value to a
+   new immutable name, visible in the guard and the body. IDENT followed by
+   "(" is a structure with one pattern per field, in field order. *)
+pattern_alternative = WILDCARD
+                    | IDENT
+                    | IDENT, "(", [ pattern, { ",", pattern } ], ")"
+                    | [ "мінус" ], SMALL_INTEGER
+                    | "мінус", I64_MIN_MAGNITUDE
+                    | boolean_literal
+                    | "шось", "(", pattern, ")"
+                    | "нема"
+                    | "вийшло", "(", pattern, ")"
+                    | "облом", "(", pattern, ")"
+                    | "(", pattern, ")" ;
+WILDCARD = ? an IDENT token whose text is exactly _ ? ;
+
 (* "харе" ("enough!") leaves the innermost loop. The grammar accepts it
    wherever a statement is; the semantic stage allows it only inside a loop. *)
 break_statement = "харе" ;
@@ -160,8 +195,8 @@ break_statement = "харе" ;
 (* A block is a nonempty sequence of statements. EVERY statement inside
    a block, including nested if_statement, ends with NEWLINE. Blank and
    comment-only lines may occur anywhere. A block ends when the parser sees
-   "а", "отакої", "порішали", or "докрутились" at line start. Indentation is
-   ignored as horizontal space. *)
+   "а", "отакої", "порішали", "докрутились", "випадок", or "розібрали" at
+   line start. Indentation is ignored as horizontal space. *)
 block = { NEWLINE },
         statement, NEWLINE,
         { NEWLINE | ( statement, NEWLINE ) } ;
@@ -403,7 +438,8 @@ keyword = "желєзобетонно"
         | "такі" | "діла" | "склепай" | "ану" | "кажи"
         | "крутимось" | "поки" | "докрутились" | "харе"
         | "всюди"
-        | "може" | "вийде" | "шось" | "нема" | "вийшло" | "облом" ;
+        | "може" | "вийде" | "шось" | "нема" | "вийшло" | "облом"
+        | "розбери" | "випадок" | "розібрали" ;
 
 reserved_word = keyword | "чутки" ;
 

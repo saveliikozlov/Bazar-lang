@@ -37,6 +37,9 @@ const P = {
   newObject: 'object_creation = "склепай", IDENT, arguments ;',
   while: 'while_loop = "крутимось", "поки", expression, NEWLINE, block, "докрутились" ;',
   for: 'for_loop = "крутимось", IDENT, "тіпа", type, RANGE_FROM, expression, RANGE_TO, expression, NEWLINE, block, "докрутились" ;',
+  match: 'match_statement = "розбери", expression, NEWLINE, { NEWLINE }, arm, { arm }, "розібрали" ;',
+  arm: 'arm = "випадок", pattern, [ "якшо", "реально", expression ], NEWLINE, block ;',
+  pattern: 'pattern = pattern_alternative, { "або", pattern_alternative } ;',
   forEach: 'for_each_loop = "крутимось", IDENT, "тіпа", type, EACH_FROM, expression, NEWLINE, block, "докрутились" ;',
   break: 'break_statement = "харе" ;',
 };
@@ -50,6 +53,19 @@ const VARIANT_EXAMPLE = [
   'порішали',
   'зуб даю з тіпа може дрібняк це нема',
   'базарь з або 0',
+].join('\n');
+
+const MATCH_EXAMPLE = [
+  'розбери ділення(7, 0)',
+  'випадок вийшло(0)',
+  '    базарь "нуль"',
+  'випадок вийшло(частка) якшо реально частка більше 100',
+  '    базарь "багато"',
+  'випадок вийшло(частка)',
+  '    базарь частка',
+  'випадок облом(_)',
+  '    базарь "не вийшло"',
+  'розібрали',
 ].join('\n');
 
 const FUNCTION_EXAMPLE = [
@@ -448,6 +464,29 @@ const KEYWORDS = [
     syntax: 'облом(EXPR)  |  вийде TYPE або облом TYPE  |  EXPR.облом',
     example: VARIANT_EXAMPLE,
     semantic: true,
+  },
+  {
+    id: 'розбери', kind: 'keyword', words: ['розбери'],
+    meaning: "Opens a match, literally sort it out. The value is evaluated once, and the body of the first `випадок` whose pattern matches runs. The arms must cover every value: the compiler names a missing one, such as `шось(облом(_))`, and rejects an arm that can never match. Equivalent: `match e { … }`.",
+    productions: [P.match],
+    syntax: 'розбери EXPR ⏎ випадок PATTERN ⏎ BLOCK … розібрали',
+    example: MATCH_EXAMPLE,
+    semantic: true,
+  },
+  {
+    id: 'випадок', kind: 'keyword', words: ['випадок'],
+    meaning: "One arm of `розбери`, literally case. A pattern is `_`, a name that binds the value, an integer, `реально` or `гон`, `шось(P)`, `нема`, `вийшло(P)`, `облом(P)`, a structure `Назва(P, …)` with every field, or alternatives joined by `або`. `якшо реально EXPR` after the pattern adds a guard; an arm with a guard does not count toward covering every value.",
+    productions: [P.arm, P.pattern],
+    syntax: 'випадок PATTERN [ якшо реально EXPR ] ⏎ BLOCK',
+    example: MATCH_EXAMPLE,
+    semantic: true,
+  },
+  {
+    id: 'розібрали', kind: 'keyword', words: ['розібрали'],
+    meaning: "Closes a match, literally sorted out. Occupies a separate line.",
+    productions: [P.match],
+    syntax: 'розбери … розібрали',
+    example: MATCH_EXAMPLE,
   },
 ];
 

@@ -190,3 +190,15 @@ test("може and вийде: types, values, checks, and the fallback", async (
   assert.strictEqual((await map('зуб даю з тіпа може дрібняк це нема'))['може'], 'storage.type.bazar');
   assert.strictEqual((await map('базарь шосьб'))['шосьб'], 'variable.other.bazar');
 });
+
+test("розбери: match words, guards, and patterns", async () => {
+  const match = 'keyword.control.match.bazar';
+  assert.strictEqual((await map('розбери з'))['розбери'], match);
+  const arm = await map('випадок шось(х) якшо реально х більше 0');
+  assert.strictEqual(arm['випадок'], match);
+  assert.strictEqual(arm['шось'], 'constant.language.variant.bazar');
+  assert.strictEqual(arm['якшо'], 'keyword.control.conditional.bazar');
+  assert.strictEqual(arm['х'], 'variable.other.bazar');
+  assert.strictEqual((await map('розібрали'))['розібрали'], match);
+  assert.strictEqual((await map('розберика'))['розберика'], 'variable.other.bazar');
+});
