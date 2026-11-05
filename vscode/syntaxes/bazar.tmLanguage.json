@@ -242,6 +242,10 @@
       "match": "[,.;]"
     },
     {
+      "name": "keyword.operator.try.bazar",
+      "match": "\\?"
+    },
+    {
       "name": "variable.other.bazar",
       "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])[A-Za-z_ЁёА-яІіЇїЄєҐґ][A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ]*"
     }

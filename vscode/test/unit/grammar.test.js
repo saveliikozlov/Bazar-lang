@@ -202,3 +202,12 @@ test("розбери: match words, guards, and patterns", async () => {
   assert.strictEqual((await map('розібрали'))['розібрали'], match);
   assert.strictEqual((await map('розберика'))['розберика'], 'variable.other.bazar');
 });
+
+test("?: the propagation operator after calls, names, and chains", async () => {
+  const tokens = await scopes('тримай шось(м.перша()? плюс з??)');
+  const marks = tokens.filter(([text]) => text.includes('?'));
+  assert.ok(marks.length >= 2);
+  for (const [, scope] of marks) assert.strictEqual(scope, 'keyword.operator.try.bazar');
+  assert.ok((await scopes('базарь "чому?"')).every(([, scope]) => scope !== 'keyword.operator.try.bazar'));
+  assert.ok((await scopes('чутки: шо там?')).every(([, scope]) => scope !== 'keyword.operator.try.bazar'));
+});
