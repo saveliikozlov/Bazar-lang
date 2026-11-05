@@ -9,8 +9,9 @@ Conditions start with `якшо реально`, may have an `а нє` branch, a
 start with `маю дєло`, structures with `такі діла`, and both end with
 `порішали`. Fixed-size arrays have types like `[дрібняк; 5]` and are filled
 with `[всюди 0]`. `може дрібняк` holds `шось(5)` or `нема`, and
-`вийде дрібняк або облом крупняк` holds `вийшло(5)` or `облом(404)`. Source
-files use `.bazar`.
+`вийде дрібняк або облом крупняк` holds `вийшло(5)` or `облом(404)`.
+`розбери` matches a value against patterns, and the compiler checks that
+its `випадок` arms cover every value. Source files use `.bazar`.
 
 The compiler reads UTF-8 source, checks lexical and syntactic structure,
 runs a semantic pass over the AST, and generates LLVM IR through the
@@ -461,6 +462,55 @@ copied like arrays and objects; in memory `може T` is `{i1, T}` and
 Pattern matching and the `?` operator will add more ways to take the value
 out. See [examples/variants.bazar](examples/variants.bazar).
 
+## Extra feature: розбери
+
+`розбери X` ("sort it out") evaluates X once and runs the body of the first
+`випадок` ("case") whose pattern matches; `розібрали` ("sorted out") closes it.
+A pattern is `_`, which matches anything; a name, which matches anything and
+binds the value to a new immutable variable; an integer or `реально`/`гон`;
+`шось(P)`, `нема`, `вийшло(P)`, or `облом(P)`; a structure `Точка(P, P)` with
+one pattern per field; or alternatives joined by `або`. `якшо реально E` after
+a pattern adds a guard:
+
+```text
+маю дєло опиши(з тіпа може вийде дрібняк або облом базар) на виході дрібняк
+    розбери з
+    випадок нема
+        тримай 0
+    випадок шось(вийшло(н)) якшо реально н менше 0
+        тримай мінус 1
+    випадок шось(вийшло(н))
+        тримай н
+    випадок шось(облом(реально)) або шось(облом(гон))
+        тримай 99
+    розібрали
+порішали
+базарь опиши(шось(вийшло(мінус 7)))
+базарь опиши(шось(облом(гон)))
+```
+
+This prints `-1` and `99`. The compiler checks the arms with the usefulness
+algorithm of Luc Maranget ([exhaustiveness.py](exhaustiveness.py)). When
+a value has no arm, the error names one; remove the last arm above and it says
+
+```text
+compilation error: line 2:5: Не всі випадки розібрано: шо робити з «шось(облом(_))»? Додай для нього «випадок» або «випадок _». Випадки з «якшо реально» не рахуються: їхня умова може не справдитись.
+```
+
+The last sentence appears because the match has a guarded arm.
+
+An arm that can never run is an error too, such as `випадок шось(вийшло(5))`
+below `випадок шось(_)`. Integers are covered only by `_` or a name, `базар`
+by `реально` and `гон`. An arm with a guard does not count toward covering
+every value, because its condition may be false. A `розбери` whose arms all
+end with `тримай` ends the function. `_` is the wildcard only in a pattern;
+elsewhere it stays an ordinary name. See [examples/match.bazar](examples/match.bazar).
+
+In the IR the value is stored once, and the arms are tried in order: each
+part of a pattern is a load and a comparison that jumps to the next arm when
+it fails, and a name is a copy into its own alloca. After the last arm comes
+`unreachable`, because some arm always matches.
+
 ## Semantic rules
 
 The semantic pass ([semantic.py](semantic.py)) runs on the AST before code
@@ -525,7 +575,8 @@ that follows it and one in `tests/invalid` that breaks it (named in brackets).
     the function's result type [`semantic_return_wrong_type`,
     `semantic_return_outside_function`].
 13. Every path through a function ends with `тримай`: the body ends with it,
-    or with a `якшо … а нє … отакої` whose branches both do. Nothing follows
+    or with a `якшо … а нє … отакої` whose branches both do, or with a
+    `розбери` whose arms all do (rule 46). Nothing follows
     `тримай` in its block [`semantic_missing_return_path`,
     `semantic_statement_after_return`].
 14. `всьо розходимось` takes an integer and is allowed only in the main
@@ -700,6 +751,41 @@ that follows it and one in `tests/invalid` that breaks it (named in brackets).
     `variant_compare_structures`, `variant_compare_different_types`,
     `variant_arithmetic`, `variant_condition`, `variant_exit_value`].
 
+**розбери**
+
+43. The value of `розбери` may have any type and is evaluated once. Each arm
+    is a child scope that holds the names its pattern binds and the outer
+    block of its body, so the body cannot redeclare them; they are immutable
+    and invisible after the arm. A guard is a `базар`, sees those names, and
+    runs only when the pattern matches. An arm body is nonempty, and a
+    `розбери` has at least one arm [`match_values` / `match_binding_is_immutable`,
+    `match_binding_invisible_after`, `match_body_redeclares_binding`,
+    `match_guard_not_bool`, `match_guard_without_really`, `match_empty_arm`,
+    `match_no_arms`, `match_unclosed`, `match_arm_outside`,
+    `match_closer_outside`, `match_pattern_expression`].
+44. The arms without a guard cover every value: integers only with `_` or a
+    name, `базар` with `реально` and `гон`, `може` with `шось` and `нема`,
+    `вийде` with `вийшло` and `облом`, and inside them every value of what they
+    hold. The error names a value no arm covers [`match_basics` /
+    `match_missing_none`, `match_missing_nested`,
+    `match_integers_need_wildcard`, `match_guard_does_not_count`,
+    `match_missing_structure_field_value`].
+45. Every arm, and every alternative of an `або` pattern, matches some value
+    that no arm without a guard above it matches. A name is not a constant:
+    `випадок МАКС` binds every value, so the arms below it never run
+    [`match_unreachable_after_wildcard`, `match_unreachable_binding_catches_all`,
+    `match_unreachable_alternative`, `match_unreachable_nested`].
+46. Patterns fit the type of the value: a literal of its type and range,
+    `шось` and `нема` for `може`, `вийшло` and `облом` for `вийде`, and a
+    structure pattern for that structure with one pattern per field. A name
+    is bound at most once per pattern, and not inside alternatives. A
+    `розбери` whose arms all end with `тримай` counts as ending with it
+    (rule 13) [`match_values` / `match_variant_wrong_type`,
+    `match_literal_wrong_type`, `match_literal_too_big`,
+    `match_structure_wrong_field_count`, `match_structure_unknown`,
+    `match_structure_wrong_type`, `match_binding_in_alternatives`,
+    `match_binding_twice`, `match_function_missing_return`].
+
 ## Code generation
 
 [codegen.py](codegen.py) builds the module with `llvmlite.ir`; the only IR
@@ -712,6 +798,8 @@ text the compiler writes is `str(module)`.
   `llvm.memcpy`; see [Arrays and objects in the IR](#arrays-and-objects-in-the-ir).
   `може T` is the literal struct `{i1, T}` and `вийде T або облом E` is
   `{i1, T, E}`; `з або x` is a branch on the tag and a `phi`.
+- **розбери** tries its arms in order with a chain of comparisons; see
+  [Extra feature: розбери](#extra-feature-розбери).
 - **Functions**: `bz.NAME` per function and `bz.Точка.NAME` per member
   function, whose first parameter is a pointer to the object. Every function
   is declared before any body, so forward calls resolve. The `bz.` prefix
@@ -906,7 +994,9 @@ items under the label, or `label: []` when empty. Types are `i32`, `i64`,
 source, such as `[[i32; 3]; Н плюс 1]`, `Option<i32>`, or `Result<i32, i64>`.
 A `VariantNode` prints `variant=some`, `none`, `ok`, or `err`. The fallback
 `з або x` prints as `operator=or`, like logical OR; the semantic pass tells
-them apart by the type on the left.
+them apart by the type on the left. A `MatchNode` prints its `subject` and
+`arms`; each `MatchArmNode` its `pattern`, `guard` (`guard: None` without
+one), and `body`.
 
 ## Tests
 
@@ -922,18 +1012,18 @@ exits nonzero if any did:
 
 | Folder | Count | Check |
 | --- | --- | --- |
-| `tests/valid` | 53 | `--ast` output equals `NAME.ast` (front-end tests; some Stage 1 ones use undeclared names on purpose); with `--optimize`, it equals `NAME.optimized.ast` when the optimizer changes the tree, or `NAME.optimized.err` for the 16 that stop in the semantic pass |
-| `tests/invalid` | 297 | compiling exits 1, prints exactly `NAME.err`, and writes no file |
-| `tests/run` | 39 | end to end: compiled, run with `lli` (or built with `llc` and `clang`), stdout equals `NAME.expected`; `NAME.in` is stdin; `NAME.error` is the expected run-time error |
-| `examples` | 12 | compiling succeeds |
+| `tests/valid` | 54 | `--ast` output equals `NAME.ast` (front-end tests; some Stage 1 ones use undeclared names on purpose); with `--optimize`, it equals `NAME.optimized.ast` when the optimizer changes the tree, or `NAME.optimized.err` for the 16 that stop in the semantic pass |
+| `tests/invalid` | 326 | compiling exits 1, prints exactly `NAME.err`, and writes no file |
+| `tests/run` | 41 | end to end: compiled, run with `lli` (or built with `llc` and `clang`), stdout equals `NAME.expected`; `NAME.in` is stdin; `NAME.error` is the expected run-time error |
+| `examples` | 13 | compiling succeeds |
 | `programs` | 3 sessions | built with `llc` and `clang`; the native binary's stdout equals the session's `.expected` |
-| `tests/optimize` | 11 | `--optimize --ast` output equals `NAME.ast`, and stdout equals `NAME.expected` with and without the flag; `NAME.in` and `NAME.error` as in `tests/run` |
+| `tests/optimize` | 12 | `--optimize --ast` output equals `NAME.ast`, and stdout equals `NAME.expected` with and without the flag; `NAME.in` and `NAME.error` as in `tests/run` |
 
-The `tests/valid`, `tests/invalid`, `tests/run`, `examples`, and `programs` checks each run twice, without the flag and with `--optimize`. In `tests/valid`, 26 trees are unchanged by the optimizer and still equal `NAME.ast`; 11 change (unused declarations and functions removed, `покажи` inlined), and their trees are in `NAME.optimized.ast`; 16 deliberately use undeclared names, so they stop in the semantic pass before the optimizer and print the same error as without the flag, pinned in `NAME.optimized.err`.
+The `tests/valid`, `tests/invalid`, `tests/run`, `examples`, and `programs` checks each run twice, without the flag and with `--optimize`. In `tests/valid`, 27 trees are unchanged by the optimizer and still equal `NAME.ast`; 11 change (unused declarations and functions removed, `покажи` inlined), and their trees are in `NAME.optimized.ast`; 16 deliberately use undeclared names, so they stop in the semantic pass before the optimizer and print the same error as without the flag, pinned in `NAME.optimized.err`.
 
 LLVM tools are looked up in `$LLVM_BIN`, then on `PATH`, then in the
-Homebrew folders. The 123 unit tests cover the lexer, the parser, the type
-values, the semantic pass's symbol table and annotations, and the CLI.
+Homebrew folders. The 130 unit tests cover the lexer, the parser, the type
+values, the exhaustiveness algorithm, the semantic pass's symbol table and annotations, and the CLI.
 
 ## VS Code extension
 
@@ -966,6 +1056,7 @@ parser.py      recursive-descent parser, one method per grammar rule
 ast_nodes.py   AST classes and stable dump
 bazar_types.py the resolved types: integers, базар, structures, arrays, може, вийде
 semantic.py    semantic pass and symbol table
+exhaustiveness.py  the usefulness algorithm behind розбери
 optimizer.py   the transformations behind --optimize
 codegen.py     LLVM IR through the llvmlite builder
 compiler.py    command-line interface

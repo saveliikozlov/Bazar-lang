@@ -315,3 +315,76 @@ The fallback after `або` must have the type that `шось` holds, here `др
 
 A condition is a `базар`, not a `може базар`: write `якшо реально з або гон`
 or `якшо реально з.шось`.
+
+## розбери — [examples/match.bazar](examples/match.bazar)
+
+A till at the bazaar reads orders, a product number and a quantity, until
+product 0, and sorts out how each one ended:
+
+```text
+маю дєло рахунок(з тіпа Замовлення) на виході вийде крупняк або облом дрібняк
+    розбери з
+    випадок Замовлення(_, 0)
+        тримай облом(1)
+    випадок Замовлення(_, штук) якшо реально штук менше 0
+        тримай облом(2)
+    випадок Замовлення(товар, штук)
+        розбери ціна(товар)
+        випадок шось(за_штуку)
+            тримай вийшло(за_штуку на штук)
+        випадок нема
+            тримай облом(3)
+        розібрали
+    розібрали
+порішали
+```
+
+Every arm of both matches ends with `тримай`, so the function needs no
+`тримай` after them. With input `1 4 3 2 9 1 2 0 4 -1 0` the program prints:
+
+```text
+100
+200
+Такого товару нема
+Нуль штук — це не покупка
+Мінус штук? Не мути
+Всьо, розходимось: 300
+```
+
+Common errors, each reported when compiling:
+
+```text
+зуб даю з тіпа може дрібняк це нема
+розбери з
+випадок шось(х)
+    базарь х
+розібрали
+```
+
+`нема` has no arm: add `випадок нема` or `випадок _`.
+
+```text
+зуб даю н тіпа дрібняк це 1
+розбери н
+випадок _
+    базарь 0
+випадок 1
+    базарь 1
+розібрали
+```
+
+`випадок 1` never runs: `_` above it already matches everything.
+
+```text
+желєзобетонно МАКС тіпа дрібняк це 9
+зуб даю н тіпа дрібняк це 1
+розбери н
+випадок МАКС
+    базарь 0
+випадок _
+    базарь 1
+розібрали
+```
+
+A name in a pattern binds a new variable, even when a constant has that
+name, so `випадок МАКС` matches every value and `випадок _` never runs.

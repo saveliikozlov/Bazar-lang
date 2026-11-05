@@ -1,4 +1,4 @@
-# Bazar («Базар») — language specification, version 0.5
+# Bazar («Базар») — language specification, version 0.6
 
 Bazar is a small imperative language whose keywords are Ukrainian/surzhyk
 phrases. Its motto means: *Bazar is a language where you answer for your words.*
@@ -9,8 +9,8 @@ This document describes the lexer, parser, AST, and semantics. Version 0.3
 (Stage 2) adds functions, structures, member functions, `ану кажи`, string
 printing, and the auto constructor; the semantic pass enforces every rule,
 and the compiler generates LLVM IR. Version 0.4 adds fixed-size arrays, and
-version 0.5 the `може` (option) and `вийде` (result) types. The full numbered
-rule list is in
+version 0.5 the `може` (option) and `вийде` (result) types, and version 0.6
+pattern matching with `розбери`. The full numbered rule list is in
 [README.md](README.md#semantic-rules). The authoritative
 syntax is [grammar.ebnf](grammar.ebnf). Programs are in [examples/](examples)
 and explained in [EXAMPLES.md](EXAMPLES.md).
@@ -34,6 +34,7 @@ Each statement occupies one physical line. `якшо реально`, `маю д
 | `крутимось NAME тіпа TYPE від A по B` … `докрутились` | loop over an inclusive integer range | `for name in a..=b { … }` |
 | `крутимось NAME тіпа TYPE з EXPR` … `докрутились` | loop over the elements of an array | `for name in array { … }` |
 | `харе` | leave the innermost loop; literally enough | `break` |
+| `розбери EXPR` … `випадок PATTERN [якшо реально EXPR]` … `розібрали` | match against patterns, every value covered; literally sort it out … case … sorted out | `match e { p if g => … }` |
 | `перевзувся NAME.FIELD… тепер EXPR` | assignment to a field through a mutable chain | `o.f = e` |
 | `перевзувся NAME[I]… тепер EXPR` | assignment to an array element through a mutable chain | `a[i] = e` |
 | `тримай EXPR` | leave the function with a value; literally here, hold it | `return e` |
@@ -148,8 +149,9 @@ Operators are listed from **highest** to lowest precedence:
   `желєзобетонно зуб даю мутна тєма тіпа це дрібняк крупняк базар перевзувся тепер базарь
   всьо розходимось якшо реально а нє отакої гон або і ше рівно не більше менше
   плюс мінус на ділити маю дєло виході тримай порішали такі діла склепай ану кажи
-  крутимось поки докрутились харе всюди може вийде шось нема вийшло облом чутки`.
-  `від`, `по`, and `з` are not reserved.
+  крутимось поки докрутились харе всюди може вийде шось нема вийшло облом
+  розбери випадок розібрали чутки`. `від`, `по`, and `з` are not reserved, and
+  `_` is the wildcard only inside a pattern.
   `тіпа` is entirely Cyrillic: `тіпa` with a final Latin `a` is an identifier,
   rather than the keyword.
 - **Integers.** One or more decimal ASCII digits; leading zeros are allowed.
@@ -247,8 +249,17 @@ ASTNode(line, column)
 │   ├── CallStatementNode(call)            member_call flag
 │   ├── FieldAssignmentNode(target, value)    target: fields and indexes
 │   ├── ForEachNode(name, declared_type, array, body)
+│   ├── MatchNode(subject, arms)
 │   ├── FunctionNode(name, parameters, result_type, body)
 │   └── StructureNode(name, fields, methods)
+├── MatchArmNode(pattern, guard, body)       guard may be None
+├── PatternNode
+│   ├── WildcardPatternNode()              _
+│   ├── BindingPatternNode(name)
+│   ├── LiteralPatternNode(literal)        integer, мінус integer, реально, гон
+│   ├── VariantPatternNode(variant, inner) some none ok err; inner None for нема
+│   ├── StructurePatternNode(structure, fields)
+│   └── OrPatternNode(alternatives)
 ├── ParameterNode(name, declared_type)
 ├── FieldNode(name, declared_type, mutable, index, default)
 ├── TypeNode
