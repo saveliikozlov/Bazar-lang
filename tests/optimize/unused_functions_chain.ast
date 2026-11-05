@@ -1,0 +1,4 @@
+ProgramNode line=2 column=1
+  PrintNode line=18 column=1
+    value:
+      StringNode line=18 column=14 value="тільки це"

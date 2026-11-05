@@ -1,0 +1,73 @@
+ProgramNode line=2 column=1
+  StructureNode line=12 column=1 name=Коробка
+    fields:
+      FieldNode line=13 column=5 name=значення type=i32 mutable=true index=0
+        default:
+          IntegerNode line=13 column=71 value=0
+    methods:
+      FunctionNode line=14 column=5 name=онови result=i32
+        parameters:
+          ParameterNode line=14 column=32 name=н type=i32
+        body:
+          BlockNode line=15 column=9
+            DeclarationNode line=15 column=58 name=н.подвоєна_сума.2 type=i32 mutable=false
+              initializer:
+                IdentifierNode line=15 column=84 name=н
+            DeclarationNode line=10 column=18 name=н.сума_до.1.подвоєна_сума.2 type=i32 mutable=false
+              initializer:
+                IdentifierNode line=10 column=32 name=н.подвоєна_сума.2
+            DeclarationNode line=3 column=5 name=сума.сума_до.1.подвоєна_сума.2 type=i32 mutable=true
+              initializer:
+                IntegerNode line=3 column=63 value=0
+            ForNode line=4 column=5 name=к.сума_до.1.подвоєна_сума.2 type=i32
+              start:
+                IntegerNode line=4 column=58 value=1
+              end:
+                IdentifierNode line=4 column=65 name=н.сума_до.1.подвоєна_сума.2
+              body:
+                BlockNode line=5 column=9
+                  AssignmentNode line=5 column=9 name=сума.сума_до.1.подвоєна_сума.2
+                    value:
+                      BinaryNode line=5 column=59 operator=add
+                        left:
+                          IdentifierNode line=5 column=50 name=сума.сума_до.1.подвоєна_сума.2
+                        right:
+                          IdentifierNode line=5 column=68 name=к.сума_до.1.подвоєна_сума.2
+            DeclarationNode line=7 column=5 name=результат.сума_до.1.подвоєна_сума.2 type=i32 mutable=false
+              initializer:
+                IdentifierNode line=7 column=18 name=сума.сума_до.1.подвоєна_сума.2
+            DeclarationNode line=10 column=5 name=результат.подвоєна_сума.2 type=i32 mutable=false
+              initializer:
+                BinaryNode line=10 column=36 operator=mul
+                  left:
+                    IdentifierNode line=10 column=18 name=результат.сума_до.1.подвоєна_сума.2
+                  right:
+                    IntegerNode line=10 column=41 value=2
+            AssignmentNode line=15 column=9 name=значення
+              value:
+                BinaryNode line=15 column=88 operator=add
+                  left:
+                    IdentifierNode line=15 column=58 name=результат.подвоєна_сума.2
+                  right:
+                    IdentifierNode line=15 column=97 name=значення
+            ReturnNode line=16 column=9
+              value:
+                IdentifierNode line=16 column=22 name=значення
+  DeclarationNode line=19 column=1 name=коробка type=Коробка mutable=true
+    initializer:
+      NewObjectNode line=19 column=65 structure=Коробка
+        arguments: []
+  ForNode line=20 column=1 name=к type=i32
+    start:
+      IntegerNode line=20 column=54 value=1
+    end:
+      IntegerNode line=20 column=61 value=3
+    body:
+      BlockNode line=21 column=5
+        PrintNode line=21 column=5
+          value:
+            MemberCallNode line=21 column=33 method=онови
+              object:
+                IdentifierNode line=21 column=18 name=коробка
+              arguments:
+                IdentifierNode line=21 column=44 name=к

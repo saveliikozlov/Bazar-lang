@@ -1,0 +1,34 @@
+ProgramNode line=2 column=1
+  DeclarationNode line=2 column=1 name=х type=i32 mutable=false
+    initializer:
+      IntegerNode line=2 column=47 value=1
+  IfNode line=3 column=1
+    condition:
+      BooleanNode line=3 column=25 value=true
+    then_body:
+      BlockNode line=4 column=5
+        PrintNode line=5 column=5
+          value:
+            StringNode line=5 column=18 value="всередині"
+    else_body: None
+  PrintNode line=7 column=1
+    value:
+      IdentifierNode line=7 column=14 name=х
+  FunctionNode line=8 column=1 name=ф result=i32
+    parameters:
+      ParameterNode line=8 column=20 name=х type=i32
+    body:
+      BlockNode line=9 column=5
+        ReturnNode line=10 column=5
+          value:
+            IdentifierNode line=10 column=18 name=х
+  PrintNode line=12 column=1
+    value:
+      CallNode line=12 column=14 name=ф
+        arguments:
+          IntegerNode line=12 column=17 value=3
+  PrintNode line=13 column=1
+    value:
+      CallNode line=13 column=14 name=ф
+        arguments:
+          IntegerNode line=13 column=17 value=4

@@ -58,7 +58,7 @@ Input files may have any extension, including `.bazar` and `.txt`.
 | Result | Exit code | stdout | stderr | output.ll |
 | --- | --- | --- | --- | --- |
 | success | 0 | AST dump (`--ast`) or empty | empty | written |
-| lexical, syntax, or semantic error | 1 | empty | one line: `compilation error: line L:C: MESSAGE` | not written |
+| lexical, syntax, or semantic error, or an expression too deep to compile | 1 | empty | one line: `compilation error: line L:C: MESSAGE` | not written |
 | invalid arguments, unreadable input, unwritable output, no `llvmlite` | 2 | empty | one line | not written |
 
 ```text
@@ -527,6 +527,111 @@ text the compiler writes is `str(module)`.
   `llvm.s*.with.overflow` intrinsics.
 - **Loops** are basic blocks with a back edge; see [Loops in the IR](#loops-in-the-ir).
 
+## Optimizer
+
+`--optimize`, anywhere on the command line, runs [optimizer.py](optimizer.py) on
+the checked tree before code generation. Together with `--ast` it prints the
+tree after the optimizer. A program prints the same with and without the flag,
+run-time errors included, because moved nodes keep their line and column. The
+three transformations repeat until a whole round changes nothing, since each
+can give work to the others.
+
+```sh
+.venv/bin/python compiler.py --optimize programs/bank.txt bank.ll
+.venv/bin/python compiler.py --optimize --ast tests/optimize/inline_simple.bazar
+```
+
+**Unused variables.** A declaration nobody reads is removed with its
+assignments, so its `alloca` disappears from the IR, and this repeats because a
+removal can leave another variable unread. Names are compared by the symbol the
+semantic pass resolved, not by spelling, so a shadowing variable and the one it
+hides are never confused. An assignment through `п.х` writes `п`, it does not
+read it. Writing `х` from its own old value counts as reading it. Parameters,
+loop counters, and constants are not removed. A variable stays when any value
+it receives cannot be dropped: a call or `ану кажи` is never dropped, and
+neither is arithmetic that could stop the program with an overflow or a division
+by zero, since that error is output too. Arithmetic on values known at compile
+time is checked and can be dropped, so `2 плюс 3 на 4` goes.
+
+**Unused functions.** A function or member function that cannot be reached from
+the main program is removed with its whole body. Following calls from the main
+program means a chain of functions goes at once, and so do functions that only
+call each other.
+
+**Inlining.** A top-level function called exactly once is replaced by its body
+in front of the statement that calls it. Each parameter becomes a local
+declaration initialised with the argument, its `тримай` becomes a local whose
+value stands where the call stood, and its locals are renamed `NAME.FUNCTION.N`.
+A `.` cannot occur in a source name, so these cannot collide with the caller's.
+The function is then removed as unused.
+
+| Left alone | Why |
+| --- | --- |
+| a recursive function, directly or through others | its body would contain its own call |
+| a member function | its body uses the fields of its object |
+| a `тримай` anywhere but the last line, such as inside `якшо` or a loop | it would need a jump out of the middle of the caller |
+| a call in the condition of `крутимось поки` | the condition runs on every pass, the moved body only once |
+| a call on the right of `і ше` or `або` | it may never run |
+| a call after something that is not a plain value, as in `ф() плюс г()` for `г` | the moved body would run first and change the order of effects |
+
+For this program, `другий` is called once, its parameter `перший` is never read,
+and nobody reads `зайва`:
+
+```text
+маю дєло другий(перший тіпа дрібняк, другий тіпа дрібняк) на виході дрібняк
+    тримай другий
+порішали
+зуб даю зайва тіпа дрібняк це 5
+базарь другий(1, 2)
+```
+
+Before, without the flag:
+
+```llvm
+define i32 @"bz.другий"(i32 %"перший", i32 %"другий")
+{
+entry:
+  %"перший.1" = alloca i32
+  %"другий.1" = alloca i32
+  br label %"body"
+body:
+  store i32 %"перший", i32* %"перший.1"
+  store i32 %"другий", i32* %"другий.1"
+  %"другий.2" = load i32, i32* %"другий.1"
+  ret i32 %"другий.2"
+}
+define i32 @"main"()
+{
+entry:
+  %"зайва" = alloca i32
+  br label %"body"
+body:
+  store i32 5, i32* %"зайва"
+  %".3" = call i32 @"bz.другий"(i32 1, i32 2)
+  %".4" = call i32 (i8*, ...) @"printf"(i8* getelementptr ([4 x i8], [4 x i8]* @"str.0", i32 0, i32 0), i32 %".3")
+  ret i32 0
+}
+```
+
+After, with `--optimize`: the function, the call, and both unused slots are gone.
+
+```llvm
+define i32 @"main"()
+{
+entry:
+  %"другий.другий.1" = alloca i32
+  %"результат.другий.1" = alloca i32
+  br label %"body"
+body:
+  store i32 2, i32* %"другий.другий.1"
+  %"другий.другий.1.1" = load i32, i32* %"другий.другий.1"
+  store i32 %"другий.другий.1.1", i32* %"результат.другий.1"
+  %"результат.другий.1.1" = load i32, i32* %"результат.другий.1"
+  %".4" = call i32 (i8*, ...) @"printf"(i8* getelementptr ([4 x i8], [4 x i8]* @"str.0", i32 0, i32 0), i32 %"результат.другий.1.1")
+  ret i32 0
+}
+```
+
 ## The real program: Bazar Bank
 
 [programs/bank.txt](programs/bank.txt) is a small bank account you use from the
@@ -620,9 +725,12 @@ exits nonzero if any did:
 | `tests/run` | 29 | end to end: compiled, run with `lli` (or built with `llc` and `clang`), stdout equals `NAME.expected`; `NAME.in` is stdin; `NAME.error` is the expected run-time error |
 | `examples` | 10 | compiling succeeds |
 | `programs` | 3 sessions | built with `llc` and `clang`; the native binary's stdout equals the session's `.expected` |
+| `tests/optimize` | 8 | `--optimize --ast` output equals `NAME.ast`, and stdout equals `NAME.expected` with and without the flag; `NAME.in` and `NAME.error` as in `tests/run` |
+
+The `tests/invalid`, `tests/run`, `examples`, and `programs` checks each run twice, without the flag and with `--optimize`. `tests/valid` runs once, because it pins the tree as parsed and some of those programs deliberately do not pass the semantic pass.
 
 LLVM tools are looked up in `$LLVM_BIN`, then on `PATH`, then in the
-Homebrew folders. The 96 unit tests cover the lexer, the parser, the semantic
+Homebrew folders. The 100 unit tests cover the lexer, the parser, the semantic
 pass's symbol table and annotations, and the CLI.
 
 ## VS Code extension
@@ -655,6 +763,7 @@ lexer.py       byte-oriented lexer state machine
 parser.py      recursive-descent parser, one method per grammar rule
 ast_nodes.py   AST classes and stable dump
 semantic.py    semantic pass and symbol table
+optimizer.py   the transformations behind --optimize
 codegen.py     LLVM IR through the llvmlite builder
 compiler.py    command-line interface
 check.py       test runner: AST, errors, and end-to-end runs
