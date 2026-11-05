@@ -527,6 +527,36 @@ text the compiler writes is `str(module)`.
   `llvm.s*.with.overflow` intrinsics.
 - **Loops** are basic blocks with a back edge; see [Loops in the IR](#loops-in-the-ir).
 
+## The real program: Bazar Bank
+
+[programs/bank.txt](programs/bank.txt) is a small bank account you use from the
+keyboard. It asks for an account number, then shows a menu: deposit, withdraw,
+show the account, forecast compound interest, or leave. It uses the structures
+`Рахунок` and `Прогноз`, member functions that change the balance, and the
+functions `запитай` and `покажи_меню`.
+
+Loops carry the whole program: the menu is a `крутимось поки реально` left with
+`харе`, `запитай` repeats its question in a `крутимось поки реально` until the
+answer fits, and the forecast is a range loop over the months. Amounts have
+limits, so the forecast cannot overflow. Typing 0 cancels any question. The end
+of input reads as 0, and so does text that is not a number, so neither can hang
+the program. It prints each prompt on its own line.
+
+Build it into a native binary and replay each recorded session:
+
+```sh
+.venv/bin/python compiler.py programs/bank.txt bank.ll
+llc -relocation-model=pic -filetype=obj bank.ll -o bank.o
+clang bank.o -o bank
+./bank < programs/bank.in      # deposit, withdraw, show, forecast, leave
+./bank < programs/bank_2.in    # rejected, cancelled, and overdrawn answers
+./bank < programs/bank_3.in    # the input ends without choosing to leave
+./bank                         # or use it yourself
+```
+
+Each session's exact output is in `programs/NAME.expected`, and `check.py`
+builds the binary and compares it.
+
 ## Source format
 
 Source files use UTF-8 without a byte order mark.
@@ -589,6 +619,7 @@ exits nonzero if any did:
 | `tests/invalid` | 231 | compiling exits 1, prints exactly `NAME.err`, and writes no file |
 | `tests/run` | 29 | end to end: compiled, run with `lli` (or built with `llc` and `clang`), stdout equals `NAME.expected`; `NAME.in` is stdin; `NAME.error` is the expected run-time error |
 | `examples` | 10 | compiling succeeds |
+| `programs` | 3 sessions | built with `llc` and `clang`; the native binary's stdout equals the session's `.expected` |
 
 LLVM tools are looked up in `$LLVM_BIN`, then on `PATH`, then in the
 Homebrew folders. The 96 unit tests cover the lexer, the parser, the semantic
@@ -629,4 +660,5 @@ compiler.py    command-line interface
 check.py       test runner: AST, errors, and end-to-end runs
 examples/      sample programs
 tests/         fixtures, expected results, and unit tests
+programs/      the real program and its recorded sessions
 ```

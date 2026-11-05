@@ -15,6 +15,10 @@ tests/run/NAME.bazar: end to end. The program is compiled to NAME.ll, run
     input. Without NAME.error the program must exit 0 with empty stderr;
     with it, the program must exit 1 and print exactly NAME.error to stderr
     (a run-time overflow or division by zero).
+programs/NAME.txt: a real program. Each recorded session, NAME.in or NAME_*.in,
+    is the standard input of a native binary built with llc and clang, whose
+    stdout must equal the session's .expected exactly, with exit code 0 and
+    empty stderr. lli is not used here: the binary is the deliverable.
 
 LLVM tools are looked up in $LLVM_BIN, then on PATH, then in the Homebrew
 folders /opt/homebrew/opt/llvm/bin and /usr/local/opt/llvm/bin.
@@ -114,11 +118,8 @@ def find_tool(name):
     return None
 
 
-def run_program(module, stdin, cwd):
-    """Run a compiled .ll module; return the CompletedProcess or a problem string."""
-    lli = find_tool("lli")
-    if lli:
-        return subprocess.run([lli, str(module)], stdin=stdin, capture_output=True, cwd=cwd, timeout=60)
+def build_binary(module, cwd):
+    """Build a compiled .ll module with llc and clang; return its path or a problem string."""
     llc, clang = find_tool("llc"), find_tool("clang")
     if not (llc and clang):
         return "нема ні lli, ні llc з clang: задай LLVM_BIN"
@@ -127,6 +128,17 @@ def run_program(module, stdin, cwd):
         built = subprocess.run(command, capture_output=True, timeout=60)
         if built.returncode != 0:
             return f"{Path(command[0]).name} впав: {show(built.stderr)}"
+    return binary
+
+
+def run_program(module, stdin, cwd):
+    """Run a compiled .ll module; return the CompletedProcess or a problem string."""
+    lli = find_tool("lli")
+    if lli:
+        return subprocess.run([lli, str(module)], stdin=stdin, capture_output=True, cwd=cwd, timeout=60)
+    binary = build_binary(module, cwd)
+    if isinstance(binary, str):
+        return binary
     return subprocess.run([str(binary)], stdin=stdin, capture_output=True, cwd=cwd, timeout=60)
 
 
@@ -155,6 +167,33 @@ def check_run(source, cwd):
     if run.stdout != expected:
         return f"вивід не збігається з {expected_file.name}" + first_difference(expected, run.stdout)
     return None
+
+
+def check_session(source, session, cwd):
+    """Compile a real program, build the native binary, and replay one recorded session."""
+    expected_file = session.with_suffix(".expected")
+    if not expected_file.exists():
+        return f"нема очікуваного файлу {expected_file.name}"
+    result, wrote_output = run_compile(source, cwd)
+    if result.returncode != 0 or result.stderr or not wrote_output:
+        return f"не скомпілювалось, код {result.returncode}, stderr: {show(result.stderr)}"
+    binary = build_binary(Path(cwd) / "out.ll", cwd)
+    if isinstance(binary, str):
+        return binary
+    with open(session, "rb") as stdin:
+        run = subprocess.run([str(binary)], stdin=stdin, capture_output=True, cwd=cwd, timeout=60)
+    if run.returncode != 0 or run.stderr:
+        return f"програма вийшла з кодом {run.returncode}, stderr: {show(run.stderr)}"
+    expected = expected_file.read_bytes()
+    if run.stdout != expected:
+        return f"вивід не збігається з {expected_file.name}" + first_difference(expected, run.stdout)
+    return None
+
+
+def program_sessions(source):
+    """The recorded sessions of a real program: NAME.in and NAME_*.in."""
+    return [source.with_suffix(".in")] * source.with_suffix(".in").exists() + sorted(
+        source.parent.glob(source.stem + "_*.in"))
 
 
 def first_difference(expected, actual):
@@ -209,6 +248,24 @@ def main():
                 total += 1
                 failures += 1
                 report(f"ПРОВАЛ {orphan.relative_to(ROOT).as_posix()}: файл-сирота, джерела .bazar для нього нема")
+        for source in sorted((ROOT / "programs").glob("*.txt")):
+            sessions = program_sessions(source)
+            if len(sessions) < 2:
+                total += 1
+                failures += 1
+                report(f"ПРОВАЛ {source.relative_to(ROOT).as_posix()}: треба хоча б дві записані сесії")
+            for session in sessions:
+                total += 1
+                try:
+                    problem = check_session(source, session, cwd)
+                except subprocess.TimeoutExpired:
+                    problem = "не вклався в час: схоже, цикл ніколи не докрутиться"
+                name = session.relative_to(ROOT).as_posix()
+                if problem is None:
+                    report(f"PASS   {name}")
+                else:
+                    failures += 1
+                    report(f"ПРОВАЛ {name}: {problem}")
     report(f"\nPassed {total - failures} of {total}; failures: {failures}")
     return 1 if failures else 0
 
