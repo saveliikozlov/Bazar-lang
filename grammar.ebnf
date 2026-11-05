@@ -8,7 +8,8 @@
 
    The grammar has two layers.
    1. The LEXICAL grammar below converts source bytes into keyword tokens,
-      IDENT, INTEGER, STRING, "(", ")", ",", ".", NEWLINE, and one EOF. Horizontal whitespace
+      IDENT, INTEGER, STRING, "(", ")", "[", "]", ",", ".", ";", NEWLINE, and
+      one EOF. Horizontal whitespace
       and comments are skipped and never reach the parser.
    2. The SYNTACTIC grammar above that layer operates on the resulting tokens.
       A quoted Cyrillic word such as "зуб" denotes that exact keyword token.
@@ -75,13 +76,20 @@ mutable_declaration = "мутна", "тєма", IDENT, "тіпа", type, "це",
 
 (* дрібняк = i32, крупняк = i64, базар = bool. An IDENT names a structure
    declared with "такі діла"; the semantic stage checks that it exists. *)
-type = "дрібняк" | "крупняк" | "базар" | IDENT ;
+type = "дрібняк" | "крупняк" | "базар" | IDENT | array_type ;
 
-(* "перевзувся" assigns to an existing variable, or to a field reached
-   through a chain of field names: "перевзувся к.центр.х тепер 5". A place
-   never contains a call. *)
+(* A fixed-size array: the element type and the number of elements, which
+   is a constant expression like the initializer of "желєзобетонно". The
+   semantic stage evaluates it and checks that it is from 1 to 2147483647.
+   Elements may be arrays: [[дрібняк; 3]; 2] holds 2 arrays of 3. *)
+array_type = "[", type, ";", expression, "]" ;
+
+(* "перевзувся" assigns to an existing variable, or to a field or an array
+   element reached through a chain: "перевзувся к.центр.х тепер 5",
+   "перевзувся сітка[1][2] тепер 0". Only the indexes of a place may
+   contain a call. *)
 assignment = "перевзувся", place, "тепер", expression ;
-place = IDENT, { ".", IDENT } ;
+place = IDENT, { ".", IDENT | index } ;
 
 (* "базарь" prints a value or a string literal. *)
 print_statement = "базарь", ( STRING | expression ) ;
@@ -94,8 +102,9 @@ exit_statement = "всьо", "розходимось", expression ;
 return_statement = "тримай", expression ;
 
 (* A call made for its effect stands on its own line. The chain must END
-   in a call: "п.посунь(1)" and "порахуй()" are statements, "п.х" is not. *)
-call_statement = IDENT, { [ arguments ], ".", IDENT }, arguments ;
+   in a call: "п.посунь(1)", "точки[0].посунь(1)" and "порахуй()" are
+   statements, "п.х" and "точки[0]" are not. *)
+call_statement = IDENT, { [ arguments ], { index }, ".", IDENT }, arguments ;
 
 (* "якшо реально" ... "отакої".
    The condition ends its line; "а нє" and "отакої" each occupy a separate
@@ -111,7 +120,7 @@ if_statement = "якшо", "реально", expression, NEWLINE,
 (* "крутимось" ("we keep spinning") opens a loop and "докрутились" ("we have
    spun enough") closes it on its own line. The body contains at least one
    statement. Each nested loop has its own closer. *)
-loop_statement = while_loop | for_loop ;
+loop_statement = while_loop | for_loop | for_each_loop ;
 
 (* "крутимось поки": the condition is evaluated before every pass. *)
 while_loop = "крутимось", "поки", expression, NEWLINE,
@@ -128,6 +137,15 @@ for_loop = "крутимось", IDENT, "тіпа", type,
            "докрутились" ;
 RANGE_FROM = ? an IDENT token whose text is exactly від ? ;
 RANGE_TO = ? an IDENT token whose text is exactly по ? ;
+
+(* An array loop: the counter takes the value of every element in turn. The
+   expression is evaluated once, before the first pass, and the loop walks
+   that value. EACH_FROM is the word "з", which, like "від" and "по", is not
+   reserved and is an ordinary name everywhere else. *)
+for_each_loop = "крутимось", IDENT, "тіпа", type, EACH_FROM, expression, NEWLINE,
+                block,
+                "докрутились" ;
+EACH_FROM = ? an IDENT token whose text is exactly з ? ;
 
 (* "харе" ("enough!") leaves the innermost loop. The grammar accepts it
    wherever a statement is; the semantic stage allows it only inside a loop. *)
@@ -226,6 +244,7 @@ primary = SMALL_INTEGER
         | boolean_literal
         | read_expression
         | object_creation
+        | array_literal
         | chain
         | "(", expression, ")" ;
 
@@ -237,9 +256,20 @@ read_expression = "ану", "кажи" ;
    default may be left out: "склепай Точка()" uses every default. *)
 object_creation = "склепай", IDENT, arguments ;
 
-(* A name, optionally called, followed by any number of field accesses
-   and member calls: "х", "порахуй(1, 2)", "к.центр.х", "п.д2()". *)
-chain = IDENT, [ arguments ], { ".", IDENT, [ arguments ] } ;
+(* A name, optionally called, followed by any number of field accesses,
+   member calls, and indexes: "х", "порахуй(1, 2)", "к.центр.х", "п.д2()",
+   "сітка[1][2]", "точки[0].х". The field "розмір" of an array is its
+   length. *)
+chain = IDENT, [ arguments ], { ".", IDENT, [ arguments ] | index } ;
+
+(* One element of an array, counted from 0. *)
+index = "[", expression, "]" ;
+
+(* An array of the listed elements, at least one: "[1, 2, 3]". With
+   "всюди" ("everywhere") every element is the one value, evaluated once,
+   and the length comes from the array type expected there: a declaration,
+   an assignment, an argument, a result, or an element of a listed array. *)
+array_literal = "[", ( "всюди", expression | expression, { ",", expression } ), "]" ;
 
 (* реально = true, гон = false *)
 boolean_literal = "реально" | "гон" ;
@@ -271,7 +301,7 @@ boolean_literal = "реально" | "гон" ;
 
 lexical_input = { horizontal_space | comment | NEWLINE | lexeme }, EOF ;
 
-lexeme = keyword | IDENT | INTEGER | STRING | "(" | ")" | "," | "." ;
+lexeme = keyword | IDENT | INTEGER | STRING | "(" | ")" | "[" | "]" | "," | "." | ";" ;
 
 (* ---- Separators ---- *)
 horizontal_space = SPACE | TAB ;
@@ -349,7 +379,8 @@ keyword = "желєзобетонно"
         | "плюс" | "мінус" | "на" | "ділити"
         | "маю" | "дєло" | "виході" | "тримай" | "порішали"
         | "такі" | "діла" | "склепай" | "ану" | "кажи"
-        | "крутимось" | "поки" | "докрутились" | "харе" ;
+        | "крутимось" | "поки" | "докрутились" | "харе"
+        | "всюди" ;
 
 reserved_word = keyword | "чутки" ;
 
@@ -371,8 +402,10 @@ SMALL_INTEGER = ? digit, { digit } with value 0 … 9223372036854775807 ? ;
 I64_MIN_MAGNITUDE = ? digit, { digit } with value 9223372036854775808 ? ;
 
 (* ---- Punctuation ----
-   "," separates parameters and arguments; "." reaches a field or a member
-   function. Spaces may surround both: "п . х" is the same as "п.х". After
+   "," separates parameters, arguments, and array elements; "." reaches a
+   field or a member function; "[" and "]" write an array type, an array,
+   or an index; ";" separates the element type from the size in an array
+   type. Spaces may surround any of them: "п . х" is the same as "п.х". After
    digits, "." is a separate token, so "1.5" is a syntax error, not a
    number. *)
 
@@ -389,5 +422,5 @@ string_char = ? any Unicode scalar (valid UTF-8 as defined above), except
 escape = "\", ( "n" | '"' | "\" ) ;
 
 (* Any other character outside comments and string literals produces a
-   lexical error, including "+", "-", "=", ";", ":", emoji, disallowed
+   lexical error, including "+", "-", "=", ":", "@", emoji, disallowed
    letters such as "é" or "Љ", and control characters. *)

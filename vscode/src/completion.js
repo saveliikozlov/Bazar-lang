@@ -33,6 +33,8 @@ const ENTRIES = [
     snippet: 'крутимось поки ${1:реально}\n\t${2:харе}\nдокрутились' },
   { label: 'крутимось … від … по', dict: 'крутимось', words: ['крутимось'], kind: 'statement', detail: 'loop over an inclusive integer range',
     snippet: 'крутимось ${1:к} тіпа дрібняк від ${2:1} по ${3:10}\n\t${4:базарь к}\nдокрутились' },
+  { label: 'крутимось … з', dict: 'крутимось', words: ['крутимось'], kind: 'statement', detail: 'loop over the elements of an array',
+    snippet: 'крутимось ${1:е} тіпа ${2:дрібняк} з ${3:масив}\n\t${4:базарь е}\nдокрутились' },
   { label: 'докрутились', words: ['докрутились'], kind: 'statement', detail: 'close the loop', snippet: 'докрутились' },
   { label: 'харе', words: ['харе'], kind: 'statement', detail: 'leave the innermost loop', snippet: 'харе' },
   { label: 'базарь', words: ['базарь'], kind: 'statement', detail: 'print a value',
@@ -67,6 +69,7 @@ const ENTRIES = [
   { label: 'або', words: ['або'], kind: 'operator', detail: 'logical OR', snippet: 'або' },
   { label: 'склепай', words: ['склепай'], kind: 'keyword', detail: 'create an object', snippet: 'склепай ${1:Name}(${2})' },
   { label: 'ану кажи', words: ['ану', 'кажи'], kind: 'keyword', detail: 'read one integer', snippet: 'ану кажи' },
+  { label: 'всюди', words: ['всюди'], kind: 'keyword', detail: 'fill an array with one value', snippet: '[всюди ${1:0}]' },
 ];
 
 const documentationCache = new Map();

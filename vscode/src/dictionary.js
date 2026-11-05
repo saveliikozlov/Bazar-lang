@@ -10,7 +10,9 @@ const P = {
   constant: 'constant_declaration = "желєзобетонно", IDENT, "тіпа", type, "це", expression ;',
   immutable: 'immutable_declaration = "зуб", "даю", IDENT, "тіпа", type, "це", expression ;',
   mutable: 'mutable_declaration = "мутна", "тєма", IDENT, "тіпа", type, "це", expression ;',
-  type: 'type = "дрібняк" | "крупняк" | "базар" | IDENT ;',
+  type: 'type = "дрібняк" | "крупняк" | "базар" | IDENT | array_type ;',
+  arrayType: 'array_type = "[", type, ";", expression, "]" ;',
+  arrayLiteral: 'array_literal = "[", ( "всюди", expression | expression, { ",", expression } ), "]" ;',
   assignment: 'assignment = "перевзувся", place, "тепер", expression ;',
   print: 'print_statement = "базарь", ( STRING | expression ) ;',
   exit: 'exit_statement = "всьо", "розходимось", expression ;',
@@ -32,6 +34,7 @@ const P = {
   newObject: 'object_creation = "склепай", IDENT, arguments ;',
   while: 'while_loop = "крутимось", "поки", expression, NEWLINE, block, "докрутились" ;',
   for: 'for_loop = "крутимось", IDENT, "тіпа", type, RANGE_FROM, expression, RANGE_TO, expression, NEWLINE, block, "докрутились" ;',
+  forEach: 'for_each_loop = "крутимось", IDENT, "тіпа", type, EACH_FROM, expression, NEWLINE, block, "докрутились" ;',
   break: 'break_statement = "харе" ;',
 };
 
@@ -245,9 +248,9 @@ const KEYWORDS = [
   },
   {
     id: 'крутимось', kind: 'keyword', words: ['крутимось'],
-    meaning: "Opens a loop, literally we keep spinning. `крутимось поки EXPR` repeats while a condition holds. `крутимось NAME тіпа TYPE від A по B` runs an immutable counter over an integer range with both ends included; `від` and `по` mean this only in a loop header and are ordinary names elsewhere. Equivalent: `while e { … }`, `for name in a..=b { … }`.",
-    productions: [P.while, P.for],
-    syntax: 'крутимось поки EXPR ⏎ BLOCK докрутились  |  крутимось NAME тіпа TYPE від A по B ⏎ BLOCK докрутились',
+    meaning: "Opens a loop, literally we keep spinning. `крутимось поки EXPR` repeats while a condition holds. `крутимось NAME тіпа TYPE від A по B` runs an immutable counter over an integer range with both ends included. `крутимось NAME тіпа TYPE з ARRAY` gives the counter every element of an array in turn; the array is evaluated once, before the first pass. `від`, `по`, and `з` mean this only in a loop header and are ordinary names elsewhere. Equivalent: `while e { … }`, `for name in a..=b { … }`, `for name in array { … }`.",
+    productions: [P.while, P.for, P.forEach],
+    syntax: 'крутимось поки EXPR ⏎ BLOCK докрутились  |  крутимось NAME тіпа TYPE від A по B ⏎ BLOCK докрутились  |  крутимось NAME тіпа TYPE з ARRAY ⏎ BLOCK докрутились',
     example: LOOP_EXAMPLE,
     semantic: true,
   },
@@ -374,6 +377,14 @@ const KEYWORDS = [
     productions: [P.newObject],
     syntax: 'склепай TYPE(EXPR, …)',
     example: STRUCTURE_EXAMPLE,
+    semantic: true,
+  },
+  {
+    id: 'всюди', kind: 'keyword', words: ['всюди'],
+    meaning: "Fills an array with one value, literally everywhere. `[всюди EXPR]` evaluates EXPR once and puts it in every element; the length comes from the array type expected there, such as the type after `тіпа`. A fixed-size array type is written `[TYPE; SIZE]`, where SIZE is a constant expression. Equivalent: `[e; n]`.",
+    productions: [P.arrayLiteral, P.arrayType],
+    syntax: '[всюди EXPR]',
+    example: 'мутна тєма нулі тіпа [дрібняк; 100] це [всюди 0]',
     semantic: true,
   },
 ];

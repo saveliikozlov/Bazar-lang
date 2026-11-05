@@ -62,7 +62,7 @@
       "patterns": [
         {
           "name": "keyword.control.loop.bazar",
-          "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(?:від|по)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])"
+          "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(?:від|по|з)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])"
         },
         {
           "include": "$self"
@@ -143,7 +143,7 @@
     },
     {
       "name": "keyword.other.new.bazar",
-      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(?:склепай)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])"
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(?:склепай|всюди)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])"
     },
     {
       "name": "support.function.print.bazar",
@@ -222,8 +222,16 @@
       "match": "\\)"
     },
     {
+      "name": "punctuation.section.brackets.begin.bazar",
+      "match": "\\["
+    },
+    {
+      "name": "punctuation.section.brackets.end.bazar",
+      "match": "\\]"
+    },
+    {
       "name": "punctuation.separator.bazar",
-      "match": "[,.]"
+      "match": "[,.;]"
     },
     {
       "name": "variable.other.bazar",

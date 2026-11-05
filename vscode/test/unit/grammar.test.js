@@ -158,3 +158,22 @@ test("Stage 2: functions, structures, strings, and read", async () => {
   assert.deepStrictEqual(tokens.find(([text]) => text === '\\"'), ['\\"', 'constant.character.escape.bazar']);
   assert.strictEqual(tokens[tokens.length - 1][1], 'comment.line.bazar');
 });
+
+test("arrays: types, literals, всюди, indexes, and з only in a loop header", async () => {
+  const d = await scopes('мутна тєма м тіпа [дрібняк; 3] це [всюди 0]');
+  const at = (text, nth = 0) => d.filter(([t]) => t === text)[nth][1];
+  assert.strictEqual(at('['), 'punctuation.section.brackets.begin.bazar');
+  assert.strictEqual(at(']'), 'punctuation.section.brackets.end.bazar');
+  assert.strictEqual(at(';'), 'punctuation.separator.bazar');
+  assert.strictEqual(at('дрібняк'), 'storage.type.bazar');
+  assert.strictEqual(at('всюди'), 'keyword.other.new.bazar');
+  assert.strictEqual(at('3'), 'constant.numeric.integer.bazar');
+  const i = await map('базарь м[к].розмір');
+  assert.strictEqual(i['м'], 'variable.other.bazar');
+  assert.strictEqual(i['к'], 'variable.other.bazar');
+  const loop = await map('крутимось е тіпа дрібняк з м');
+  assert.strictEqual(loop['з'], 'keyword.control.loop.bazar');
+  // з is an ordinary name outside a loop header
+  assert.strictEqual((await map('базарь з'))['з'], 'variable.other.bazar');
+  assert.strictEqual((await map('всюдиб'))['всюдиб'], 'variable.other.bazar');
+});
