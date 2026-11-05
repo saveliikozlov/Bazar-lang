@@ -76,13 +76,19 @@ mutable_declaration = "мутна", "тєма", IDENT, "тіпа", type, "це",
 
 (* дрібняк = i32, крупняк = i64, базар = bool. An IDENT names a structure
    declared with "такі діла"; the semantic stage checks that it exists. *)
-type = "дрібняк" | "крупняк" | "базар" | IDENT | array_type ;
+type = "дрібняк" | "крупняк" | "базар" | IDENT | array_type | option_type | result_type ;
 
 (* A fixed-size array: the element type and the number of elements, which
    is a constant expression like the initializer of "желєзобетонно". The
    semantic stage evaluates it and checks that it is from 1 to 2147483647.
    Elements may be arrays: [[дрібняк; 3]; 2] holds 2 arrays of 3. *)
 array_type = "[", type, ";", expression, "]" ;
+
+(* "може" ("maybe") holds a value of its type, шось(x), or nothing, нема.
+   "вийде … або облом …" ("it will work out, or a flop") holds a result,
+   вийшло(x), or an error, облом(e). Both nest: "може може дрібняк". *)
+option_type = "може", type ;
+result_type = "вийде", type, "або", "облом", type ;
 
 (* "перевзувся" assigns to an existing variable, or to a field or an array
    element reached through a chain: "перевзувся к.центр.х тепер 5",
@@ -205,7 +211,10 @@ arguments = "(", [ expression, { ",", expression } ], ")" ;
 
 expression = or_expression ;
 
-(* "або" is logical OR, left-associative. *)
+(* "або" is logical OR, left-associative. When its left operand is a "може"
+   or a "вийде", it is the fallback instead: the value held there, or the
+   right operand, which is evaluated only when nothing (нема) or an error
+   (облом) is held. The semantic stage tells the two apart by type. *)
 or_expression = and_expression, { "або", and_expression } ;
 
 (* "і ше" is logical AND, left-associative, binding more tightly than "або". *)
@@ -245,6 +254,7 @@ primary = SMALL_INTEGER
         | read_expression
         | object_creation
         | array_literal
+        | variant
         | chain
         | "(", expression, ")" ;
 
@@ -260,7 +270,11 @@ object_creation = "склепай", IDENT, arguments ;
    member calls, and indexes: "х", "порахуй(1, 2)", "к.центр.х", "п.д2()",
    "сітка[1][2]", "точки[0].х". The field "розмір" of an array is its
    length. *)
-chain = IDENT, [ arguments ], { ".", IDENT, [ arguments ] | index } ;
+chain = IDENT, [ arguments ], { ".", IDENT, [ arguments ] | ".", variant_check | index } ;
+
+(* "з.шось" and "з.нема" check what a "може" holds; "р.вийшло" and
+   "р.облом" check a "вийде". Each is a базар and takes no parentheses. *)
+variant_check = "шось" | "нема" | "вийшло" | "облом" ;
 
 (* One element of an array, counted from 0. *)
 index = "[", expression, "]" ;
@@ -270,6 +284,14 @@ index = "[", expression, "]" ;
    and the length comes from the array type expected there: a declaration,
    an assignment, an argument, a result, or an element of a listed array. *)
 array_literal = "[", ( "всюди", expression | expression, { ",", expression } ), "]" ;
+
+(* The four values of "може" and "вийде". "шось(x)" alone is a "може" of
+   the type of x; "нема", "вийшло(x)", and "облом(e)" take their type from
+   the type expected there, like "[всюди x]". *)
+variant = "шось", "(", expression, ")"
+        | "нема"
+        | "вийшло", "(", expression, ")"
+        | "облом", "(", expression, ")" ;
 
 (* реально = true, гон = false *)
 boolean_literal = "реально" | "гон" ;
@@ -380,7 +402,8 @@ keyword = "желєзобетонно"
         | "маю" | "дєло" | "виході" | "тримай" | "порішали"
         | "такі" | "діла" | "склепай" | "ану" | "кажи"
         | "крутимось" | "поки" | "докрутились" | "харе"
-        | "всюди" ;
+        | "всюди"
+        | "може" | "вийде" | "шось" | "нема" | "вийшло" | "облом" ;
 
 reserved_word = keyword | "чутки" ;
 

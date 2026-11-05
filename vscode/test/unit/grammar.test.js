@@ -177,3 +177,16 @@ test("arrays: types, literals, всюди, indexes, and з only in a loop header
   assert.strictEqual((await map('базарь з'))['з'], 'variable.other.bazar');
   assert.strictEqual((await map('всюдиб'))['всюдиб'], 'variable.other.bazar');
 });
+
+test("може and вийде: types, values, checks, and the fallback", async () => {
+  const t = await map('зуб даю р тіпа вийде дрібняк або облом крупняк це облом(404)');
+  assert.strictEqual(t['вийде'], 'storage.type.bazar');
+  assert.strictEqual(t['облом'], 'constant.language.variant.bazar');
+  assert.strictEqual(t['або'], 'keyword.operator.logical.bazar');
+  const v = await map('базарь шось(1) рівно нема або з.вийшло');
+  assert.strictEqual(v['шось'], 'constant.language.variant.bazar');
+  assert.strictEqual(v['нема'], 'constant.language.variant.bazar');
+  assert.strictEqual(v['вийшло'], 'constant.language.variant.bazar');
+  assert.strictEqual((await map('зуб даю з тіпа може дрібняк це нема'))['може'], 'storage.type.bazar');
+  assert.strictEqual((await map('базарь шосьб'))['шосьб'], 'variable.other.bazar');
+});

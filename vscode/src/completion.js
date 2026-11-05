@@ -70,6 +70,13 @@ const ENTRIES = [
   { label: 'склепай', words: ['склепай'], kind: 'keyword', detail: 'create an object', snippet: 'склепай ${1:Name}(${2})' },
   { label: 'ану кажи', words: ['ану', 'кажи'], kind: 'keyword', detail: 'read one integer', snippet: 'ану кажи' },
   { label: 'всюди', words: ['всюди'], kind: 'keyword', detail: 'fill an array with one value', snippet: '[всюди ${1:0}]' },
+  { label: 'може', words: ['може'], kind: 'type', detail: 'optional value: шось(x) or нема', snippet: 'може ${1:дрібняк}' },
+  { label: 'вийде … або облом', dict: 'вийде', words: ['вийде'], kind: 'type', detail: 'result: вийшло(x) or облом(e)',
+    snippet: 'вийде ${1:дрібняк} або облом ${2:крупняк}' },
+  { label: 'шось', words: ['шось'], kind: 'constant', detail: 'a може value that holds x', snippet: 'шось(${1:0})' },
+  { label: 'нема', words: ['нема'], kind: 'constant', detail: 'a може value that holds nothing', snippet: 'нема' },
+  { label: 'вийшло', words: ['вийшло'], kind: 'constant', detail: 'a вийде value that holds a result', snippet: 'вийшло(${1:0})' },
+  { label: 'облом', words: ['облом'], kind: 'constant', detail: 'a вийде value that holds an error', snippet: 'облом(${1:0})' },
 ];
 
 const documentationCache = new Map();
