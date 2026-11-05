@@ -1,0 +1,27 @@
+ProgramNode line=2 column=1
+  DeclarationNode line=2 column=1 name=мелочь type=i32 mutable=false
+    initializer:
+      IntegerNode line=2 column=57 value=1
+  DeclarationNode line=3 column=1 name=если type=i32 mutable=false
+    initializer:
+      IntegerNode line=3 column=53 value=2
+  DeclarationNode line=4 column=1 name=иначе type=i32 mutable=true
+    initializer:
+      IntegerNode line=4 column=61 value=3
+  AssignmentNode line=5 column=1 name=иначе
+    value:
+      BinaryNode line=5 column=53 operator=add
+        left:
+          IdentifierNode line=5 column=44 name=если
+        right:
+          IdentifierNode line=5 column=62 name=мелочь
+  DeclarationNode line=6 column=1 name=конец type=i32 mutable=false
+    initializer:
+      IntegerNode line=6 column=55 value=4
+  PrintNode line=25 column=1
+    value:
+      BinaryNode line=25 column=25 operator=add
+        left:
+          IdentifierNode line=25 column=14 name=конец
+        right:
+          IdentifierNode line=25 column=34 name=если

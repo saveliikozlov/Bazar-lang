@@ -1,0 +1,12 @@
+ProgramNode line=2 column=1
+  StructureNode line=2 column=1 name=Точка
+    fields:
+      FieldNode line=3 column=5 name=х type=i32 mutable=true index=0
+        default:
+          IntegerNode line=3 column=57 value=0
+      FieldNode line=4 column=5 name=у type=i32 mutable=true index=1
+        default:
+          UnaryNode line=4 column=57 operator=neg
+            operand:
+              IntegerNode line=4 column=68 value=1
+    methods: []

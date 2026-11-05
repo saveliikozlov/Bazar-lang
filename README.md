@@ -720,14 +720,14 @@ exits nonzero if any did:
 
 | Folder | Count | Check |
 | --- | --- | --- |
-| `tests/valid` | 49 | `--ast` output equals `NAME.ast` (front-end tests; some Stage 1 ones use undeclared names on purpose) |
+| `tests/valid` | 49 | `--ast` output equals `NAME.ast` (front-end tests; some Stage 1 ones use undeclared names on purpose); with `--optimize`, it equals `NAME.optimized.ast` when the optimizer changes the tree, or `NAME.optimized.err` for the 16 that stop in the semantic pass |
 | `tests/invalid` | 231 | compiling exits 1, prints exactly `NAME.err`, and writes no file |
 | `tests/run` | 29 | end to end: compiled, run with `lli` (or built with `llc` and `clang`), stdout equals `NAME.expected`; `NAME.in` is stdin; `NAME.error` is the expected run-time error |
 | `examples` | 10 | compiling succeeds |
 | `programs` | 3 sessions | built with `llc` and `clang`; the native binary's stdout equals the session's `.expected` |
 | `tests/optimize` | 8 | `--optimize --ast` output equals `NAME.ast`, and stdout equals `NAME.expected` with and without the flag; `NAME.in` and `NAME.error` as in `tests/run` |
 
-The `tests/invalid`, `tests/run`, `examples`, and `programs` checks each run twice, without the flag and with `--optimize`. `tests/valid` runs once, because it pins the tree as parsed and some of those programs deliberately do not pass the semantic pass.
+The `tests/valid`, `tests/invalid`, `tests/run`, `examples`, and `programs` checks each run twice, without the flag and with `--optimize`. In `tests/valid`, 22 trees are unchanged by the optimizer and still equal `NAME.ast`; 11 change (unused declarations and functions removed, `покажи` inlined), and their trees are in `NAME.optimized.ast`; 16 deliberately use undeclared names, so they stop in the semantic pass before the optimizer and print the same error as without the flag, pinned in `NAME.optimized.err`.
 
 LLVM tools are looked up in `$LLVM_BIN`, then on `PATH`, then in the
 Homebrew folders. The 100 unit tests cover the lexer, the parser, the semantic

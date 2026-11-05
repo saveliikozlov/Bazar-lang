@@ -1,0 +1,14 @@
+ProgramNode line=2 column=1
+  DeclarationNode line=13 column=1 name=Їжак type=i32 mutable=false
+    initializer:
+      IntegerNode line=13 column=53 value=10
+  DeclarationNode line=14 column=1 name=ґанок type=i32 mutable=false
+    initializer:
+      IntegerNode line=14 column=55 value=11
+  PrintNode line=20 column=1
+    value:
+      BinaryNode line=20 column=23 operator=add
+        left:
+          IdentifierNode line=20 column=14 name=Їжак
+        right:
+          IdentifierNode line=20 column=32 name=ґанок

@@ -23,9 +23,11 @@ tests/optimize/NAME.bazar: --optimize --ast prints exactly NAME.ast, and the
     program behaves as NAME.expected says both with and without --optimize
     (NAME.in and NAME.error as in tests/run).
 
-Every invalid, example, end-to-end, and real program check runs twice: without
-the flag and with --optimize. tests/valid runs once: it pins the tree as parsed,
-and some of those programs deliberately do not pass the semantic pass.
+Every check except tests/optimize runs twice: without the flag and with
+--optimize. With the flag, a tests/valid fixture prints NAME.optimized.ast when
+the optimizer changes its tree and NAME.ast when it does not. The fixtures that
+deliberately use undeclared names stop in the semantic pass before the
+optimizer, so they exit 1 with exactly NAME.optimized.err.
 
 LLVM tools are looked up in $LLVM_BIN, then on PATH, then in the Homebrew
 folders /opt/homebrew/opt/llvm/bin and /usr/local/opt/llvm/bin.
@@ -68,7 +70,9 @@ def run_compile(source, cwd, optimized=False):
     return result, output.exists()
 
 
-def check_valid(source, cwd):
+def check_valid(source, cwd, optimized=False):
+    if optimized:
+        return check_valid_optimized(source, cwd)
     expected_file = source.with_suffix(".ast")
     if not expected_file.exists():
         return f"нема очікуваного файлу {expected_file.name}"
@@ -78,6 +82,40 @@ def check_valid(source, cwd):
         return f"код виходу {result.returncode}, stderr: {show(result.stderr)}"
     if result.stderr:
         return f"зайвий stderr: {show(result.stderr)}"
+    if result.stdout != expected:
+        return f"AST не збігається з {expected_file.name}" + first_difference(expected, result.stdout)
+    return None
+
+
+def check_valid_optimized(source, cwd):
+    """The same fixture with the flag after the file name.
+
+    NAME.optimized.ast is the tree when the optimizer changes it; without it the
+    tree must still equal NAME.ast. A front-end fixture that uses undeclared
+    names cannot reach the optimizer, so NAME.optimized.err pins its one
+    semantic error line instead.
+    """
+    tree_file = source.with_suffix(".optimized.ast")
+    error_file = source.with_suffix(".optimized.err")
+    result = subprocess.run([sys.executable, str(COMPILER), "--ast", str(source), "--optimize"],
+                            capture_output=True, cwd=cwd, timeout=60)
+    if error_file.exists():
+        expected = error_file.read_bytes()
+        if result.returncode != 1:
+            return f"код виходу {result.returncode}, а чекали 1"
+        if result.stdout:
+            return f"зайвий stdout: {show(result.stdout)}"
+        if result.stderr != expected:
+            return f"stderr не збігається з {error_file.name}" + first_difference(expected, result.stderr)
+        return None
+    expected_file = tree_file if tree_file.exists() else source.with_suffix(".ast")
+    if not expected_file.exists():
+        return f"нема очікуваного файлу {expected_file.name}"
+    if result.returncode != 0:
+        return f"код виходу {result.returncode}, stderr: {show(result.stderr)}"
+    if result.stderr:
+        return f"зайвий stderr: {show(result.stderr)}"
+    expected = expected_file.read_bytes()
     if result.stdout != expected:
         return f"AST не збігається з {expected_file.name}" + first_difference(expected, result.stdout)
     return None
@@ -235,14 +273,18 @@ def first_difference(expected, actual):
 def orphans(folder, suffix):
     """Find expectation files without matching source fixtures."""
     directory = ROOT / folder
-    return [path for path in sorted(directory.glob("*" + suffix))
-            if not path.with_suffix(".bazar").exists()]
+    found = []
+    for path in sorted(directory.glob("*" + suffix)):
+        stem = path.name[:-len(suffix)].removesuffix(".optimized")
+        if not (directory / (stem + ".bazar")).exists():
+            found.append(path)
+    return found
 
 
 def main():
     # folder, check, expectation suffixes, whether the check also runs with --optimize
     groups = (
-        ("tests/valid", check_valid, (".ast",), False),
+        ("tests/valid", check_valid, (".ast", ".optimized.err"), True),
         ("tests/invalid", check_invalid, (".err",), True),
         ("examples", check_example, (), True),
         ("tests/run", check_run, (".expected", ".in", ".error"), True),
