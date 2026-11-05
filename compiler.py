@@ -6,6 +6,9 @@
 --ast prints the AST after parsing. The second form also runs the semantic
 pass and writes the LLVM module to output.ll.
 
+--optimize, anywhere on the command line, runs the optimizer on the checked
+tree before code generation; together with --ast it prints the tree after it.
+
 Exit codes:
     0: success; the AST dump on stdout, or output.ll written.
     1: lexical, syntax, or semantic error; empty stdout, no output file, and
@@ -19,10 +22,13 @@ import sys
 
 from lexer import LexError, compilation_error_line, describe_os_error, write_text
 from parser import CompilationError, parse_program
+from optimizer import optimize
 from semantic import analyze
 
-USAGE = ("Запускай так: python3 compiler.py --ast <input.bazar> "
-         "або python3 compiler.py <input.bazar> <output.ll>")
+TOO_DEEP = "Вираз завеликий: компілятор не може пройти таке глибоке дерево. Розбий його на кілька рядків."
+
+USAGE = ("Запускай так: python3 compiler.py [--optimize] --ast <input.bazar> "
+         "або python3 compiler.py [--optimize] <input.bazar> <output.ll>")
 
 
 def read_source(path):
@@ -33,14 +39,19 @@ def read_source(path):
         return None
 
 
-def print_ast(path):
+def print_ast(path, optimized=False):
     data = read_source(path)
     if data is None:
         return 2
     try:
         tree = parse_program(data)
+        if optimized:
+            optimize(tree, analyze(tree))
     except (LexError, CompilationError) as error:
         write_text(sys.stderr, compilation_error_line(error))
+        return 1
+    except RecursionError:
+        write_text(sys.stderr, compilation_error_line(CompilationError(1, 1, TOO_DEEP)))
         return 1
     # The tree is complete before output starts, so errors never leave a
     # partial dump. Lines are streamed because deep trees produce large dumps.
@@ -52,15 +63,20 @@ def print_ast(path):
     return 0
 
 
-def compile_file(source_path, output_path):
+def compile_file(source_path, output_path, optimized=False):
     data = read_source(source_path)
     if data is None:
         return 2
     try:
         tree = parse_program(data)
         info = analyze(tree)
+        if optimized:
+            optimize(tree, info)
     except (LexError, CompilationError) as error:
         write_text(sys.stderr, compilation_error_line(error))
+        return 1
+    except RecursionError:
+        write_text(sys.stderr, compilation_error_line(CompilationError(1, 1, TOO_DEEP)))
         return 1
     # Imported here so that --ast works without llvmlite installed.
     try:
@@ -69,7 +85,11 @@ def compile_file(source_path, output_path):
         write_text(sys.stderr, "От фігня, llvmlite-у нема. Запусти через .venv/bin/python або постав "
                                "його командою «pip install -r requirements.txt», тьфу ти нути.\n")
         return 2
-    text = generate(tree, info)
+    try:
+        text = generate(tree, info)
+    except RecursionError:
+        write_text(sys.stderr, compilation_error_line(CompilationError(1, 1, TOO_DEEP)))
+        return 1
     try:
         Path(output_path).write_text(text, encoding="utf-8")
     except OSError as error:
@@ -79,10 +99,14 @@ def compile_file(source_path, output_path):
 
 
 def main(argv):
-    if len(argv) == 2 and argv[0] == "--ast":
-        return print_ast(argv[1])
-    if len(argv) == 2 and not argv[0].startswith("--") and not argv[1].startswith("--"):
-        return compile_file(argv[0], argv[1])
+    flags = [argument for argument in argv if argument.startswith("--")]
+    paths = [argument for argument in argv if not argument.startswith("--")]
+    optimized = "--optimize" in flags
+    if len(set(flags)) == len(flags) and set(flags) <= {"--ast", "--optimize"}:
+        if "--ast" in flags and len(paths) == 1:
+            return print_ast(paths[0], optimized)
+        if "--ast" not in flags and len(paths) == 2:
+            return compile_file(paths[0], paths[1], optimized)
     write_text(sys.stderr, USAGE + "\n")
     return 2
 

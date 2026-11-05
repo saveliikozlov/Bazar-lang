@@ -25,10 +25,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from ast_nodes import (
-    AssignmentNode, BinaryNode, BooleanNode, CallNode, CallStatementNode, ConstantDeclarationNode,
-    DeclarationNode, ExitNode, FieldAccessNode, FieldAssignmentNode, FunctionNode, IdentifierNode,
-    IfNode, IntegerNode, MemberCallNode, NewObjectNode, PrintNode, ReadNode, ReturnNode, StringNode,
-    StructureNode, UnaryNode,
+    AssignmentNode, BinaryNode, BooleanNode, BreakNode, CallNode, CallStatementNode,
+    ConstantDeclarationNode, DeclarationNode, ExitNode, FieldAccessNode, FieldAssignmentNode, ForNode,
+    FunctionNode, IdentifierNode, IfNode, IntegerNode, MemberCallNode, NewObjectNode, PrintNode,
+    ReadNode, ReturnNode, StringNode, StructureNode, UnaryNode, WhileNode,
 )
 from parser import CompilationError
 
@@ -52,7 +52,9 @@ def word(type_name):
 
 @dataclass(eq=False)
 class VarInfo:
-    """A constant, variable, or parameter. kind: const, immutable, mutable, param."""
+    """A constant, variable, parameter, or loop counter.
+
+    kind: const, immutable, mutable, param, counter."""
     name: str
     type: str
     kind: str
@@ -122,6 +124,7 @@ class Context:
     function: FunctionInfo | None
     scope: Scope
     const_only: bool = False         # inside a желєзобетонно initializer
+    in_loop: bool = False            # харе has a loop to leave
 
     @property
     def structure(self):
@@ -413,10 +416,14 @@ class Analyzer:
         for index, node in enumerate(statements):
             if index and isinstance(statements[index - 1], ReturnNode):
                 raise error(node, "Після «тримай» вже нічого не виконається: прибери цей рядок.")
+            if index and isinstance(statements[index - 1], BreakNode):
+                raise error(node, "Після «харе» вже нічого не виконається: прибери цей рядок.")
             self.check_statement(node, context)
 
-    def check_block(self, block, context):
-        inner = Context(context.function, Scope(context.scope))
+    def check_block(self, block, context, in_loop=None):
+        # A nested block stays inside the loop around it; a function body starts outside any loop.
+        in_loop = context.in_loop if in_loop is None else in_loop
+        inner = Context(context.function, Scope(context.scope), in_loop=in_loop)
         self.check_statements(block.statements, inner)
 
     def check_statement(self, node, context):
@@ -448,8 +455,31 @@ class Analyzer:
             self.check_block(node.then_body, context)
             if node.else_body is not None:
                 self.check_block(node.else_body, context)
+        elif isinstance(node, WhileNode):
+            self.require(node.condition, BOOL, context)
+            self.check_block(node.body, context, in_loop=True)
+        elif isinstance(node, ForNode):
+            self.check_for(node, context)
+        elif isinstance(node, BreakNode):
+            if not context.in_loop:
+                raise error(node, "«Харе» — тільки всередині «крутимось»: виходити нема з чого.")
         else:
             raise error(node, "Тут таке оголошувати не можна.")
+
+    def check_for(self, node, context):
+        # Rules 27, 28: the bounds are checked outside the counter's scope; the
+        # counter and the outer block of the body are one scope.
+        self.require_type(node.declared_type, node)
+        if node.declared_type not in INTEGER_TYPES:
+            raise error(node.type_at, f"Лічильник «{node.name}» має бути цілим числом, "
+                                      f"а не «{word(node.declared_type)}».")
+        self.require(node.start, node.declared_type, context)
+        self.require(node.end, node.declared_type, context)
+        info = VarInfo(node.name, node.declared_type, "counter")
+        node.info = info
+        scope = Scope(context.scope)
+        scope.names[node.name] = info
+        self.check_statements(node.body.statements, Context(context.function, scope, in_loop=True))
 
     def check_declaration(self, node, context):
         self.require_type(node.declared_type, node)
@@ -471,6 +501,9 @@ class Analyzer:
             context.function.assigns_field = True
         elif info.kind == "param":
             raise error(node, f"«{info.name}» — параметр, його не перевзувають. "
+                              f"Хочеш міняти — заведи «мутна тєма».")
+        elif info.kind == "counter":
+            raise error(node, f"«{info.name}» — лічильник циклу, він крутиться сам. "
                               f"Хочеш міняти — заведи «мутна тєма».")
         elif info.kind != "mutable":
             raise error(node, f"Ти за '{info.name}' зуб дав. Перевзуватись нема чого.")

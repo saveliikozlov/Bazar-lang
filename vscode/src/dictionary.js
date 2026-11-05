@@ -30,6 +30,9 @@ const P = {
   return: 'return_statement = "тримай", expression ;',
   read: 'read_expression = "ану", "кажи" ;',
   newObject: 'object_creation = "склепай", IDENT, arguments ;',
+  while: 'while_loop = "крутимось", "поки", expression, NEWLINE, block, "докрутились" ;',
+  for: 'for_loop = "крутимось", IDENT, "тіпа", type, RANGE_FROM, expression, RANGE_TO, expression, NEWLINE, block, "докрутились" ;',
+  break: 'break_statement = "харе" ;',
 };
 
 const FUNCTION_EXAMPLE = [
@@ -54,6 +57,19 @@ const IF_EXAMPLE = [
   'а нє',
   '    базарь 0',
   'отакої',
+].join('\n');
+
+const LOOP_EXAMPLE = [
+  'крутимось к тіпа дрібняк від 1 по 3',
+  '    базарь к',
+  'докрутились',
+].join('\n');
+
+const WHILE_EXAMPLE = [
+  'мутна тєма н тіпа дрібняк це 3',
+  'крутимось поки н більше 0',
+  '    перевзувся н тепер н мінус 1',
+  'докрутились',
 ].join('\n');
 
 // kind: phrase = multiword construct; keyword = word with its own meaning;
@@ -225,6 +241,37 @@ const KEYWORDS = [
     productions: [P.print],
     syntax: 'базарь EXPR',
     example: 'базарь залишок',
+    semantic: true,
+  },
+  {
+    id: 'крутимось', kind: 'keyword', words: ['крутимось'],
+    meaning: "Opens a loop, literally we keep spinning. `крутимось поки EXPR` repeats while a condition holds. `крутимось NAME тіпа TYPE від A по B` runs an immutable counter over an integer range with both ends included; `від` and `по` mean this only in a loop header and are ordinary names elsewhere. Equivalent: `while e { … }`, `for name in a..=b { … }`.",
+    productions: [P.while, P.for],
+    syntax: 'крутимось поки EXPR ⏎ BLOCK докрутились  |  крутимось NAME тіпа TYPE від A по B ⏎ BLOCK докрутились',
+    example: LOOP_EXAMPLE,
+    semantic: true,
+  },
+  {
+    id: 'поки', kind: 'keyword', words: ['поки'],
+    meaning: "Follows `крутимось` and introduces the loop condition, a `базар` checked before every pass. Equivalent: `while`.",
+    productions: [P.while],
+    syntax: 'крутимось поки EXPR ⏎ BLOCK докрутились',
+    example: WHILE_EXAMPLE,
+    semantic: true,
+  },
+  {
+    id: 'докрутились', kind: 'keyword', words: ['докрутились'],
+    meaning: "Closes a loop, literally we have spun enough. Each nested loop has its own `докрутились`. Occupies a separate line.",
+    productions: [P.while, P.for],
+    syntax: 'крутимось … докрутились',
+    example: LOOP_EXAMPLE,
+  },
+  {
+    id: 'харе', kind: 'keyword', words: ['харе'],
+    meaning: "Leaves the innermost loop, literally enough! Allowed only inside a loop, and nothing may follow it in its block. Equivalent: `break`.",
+    productions: [P.break],
+    syntax: 'харе',
+    example: 'крутимось поки реально\n    харе\nдокрутились',
     semantic: true,
   },
   {

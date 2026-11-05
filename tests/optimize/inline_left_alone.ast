@@ -1,0 +1,173 @@
+ProgramNode line=2 column=1
+  FunctionNode line=2 column=1 name=рекурсія result=i32
+    parameters:
+      ParameterNode line=2 column=34 name=н type=i32
+    body:
+      BlockNode line=3 column=5
+        IfNode line=3 column=5
+          condition:
+            BinaryNode line=3 column=32 operator=lt
+              left:
+                IdentifierNode line=3 column=29 name=н
+              right:
+                IntegerNode line=3 column=43 value=1
+          then_body:
+            BlockNode line=4 column=9
+              ReturnNode line=4 column=9
+                value:
+                  IntegerNode line=4 column=22 value=0
+          else_body: None
+        ReturnNode line=6 column=5
+          value:
+            CallNode line=6 column=18 name=рекурсія
+              arguments:
+                BinaryNode line=6 column=38 operator=sub
+                  left:
+                    IdentifierNode line=6 column=35 name=н
+                  right:
+                    IntegerNode line=6 column=49 value=1
+  FunctionNode line=8 column=1 name=вихід_з_якшо result=i32
+    parameters:
+      ParameterNode line=8 column=40 name=н type=i32
+    body:
+      BlockNode line=9 column=5
+        IfNode line=9 column=5
+          condition:
+            BinaryNode line=9 column=32 operator=gt
+              left:
+                IdentifierNode line=9 column=29 name=н
+              right:
+                IntegerNode line=9 column=45 value=0
+          then_body:
+            BlockNode line=10 column=9
+              ReturnNode line=10 column=9
+                value:
+                  IntegerNode line=10 column=22 value=1
+          else_body: None
+        ReturnNode line=12 column=5
+          value:
+            IntegerNode line=12 column=18 value=0
+  FunctionNode line=14 column=1 name=двічі result=i32
+    parameters: []
+    body:
+      BlockNode line=15 column=5
+        ReturnNode line=15 column=5
+          value:
+            IntegerNode line=15 column=18 value=2
+  FunctionNode line=17 column=1 name=права_частина result=bool
+    parameters: []
+    body:
+      BlockNode line=18 column=5
+        PrintNode line=18 column=5
+          value:
+            StringNode line=18 column=18 value="права"
+        ReturnNode line=19 column=5
+          value:
+            BooleanNode line=19 column=18 value=true
+  FunctionNode line=21 column=1 name=умова_циклу result=bool
+    parameters:
+      ParameterNode line=21 column=39 name=н type=i32
+    body:
+      BlockNode line=22 column=5
+        PrintNode line=22 column=5
+          value:
+            StringNode line=22 column=18 value="умова"
+        ReturnNode line=23 column=5
+          value:
+            BinaryNode line=23 column=21 operator=lt
+              left:
+                IdentifierNode line=23 column=18 name=н
+              right:
+                IntegerNode line=23 column=32 value=1
+  FunctionNode line=25 column=1 name=перший result=i32
+    parameters: []
+    body:
+      BlockNode line=26 column=5
+        PrintNode line=26 column=5
+          value:
+            StringNode line=26 column=18 value="перший"
+        ReturnNode line=27 column=5
+          value:
+            IntegerNode line=27 column=18 value=1
+  FunctionNode line=29 column=1 name=другий result=i32
+    parameters:
+      ParameterNode line=29 column=30 name=_ type=i32
+    body:
+      BlockNode line=30 column=5
+        PrintNode line=30 column=5
+          value:
+            StringNode line=30 column=18 value="другий"
+        ReturnNode line=31 column=5
+          value:
+            IntegerNode line=31 column=18 value=2
+  PrintNode line=33 column=1
+    value:
+      CallNode line=33 column=14 name=рекурсія
+        arguments:
+          IntegerNode line=33 column=31 value=2
+  PrintNode line=34 column=1
+    value:
+      CallNode line=34 column=14 name=вихід_з_якшо
+        arguments:
+          IntegerNode line=34 column=37 value=1
+  PrintNode line=35 column=1
+    value:
+      BinaryNode line=35 column=27 operator=add
+        left:
+          CallNode line=35 column=14 name=двічі
+            arguments: []
+        right:
+          CallNode line=35 column=36 name=двічі
+            arguments: []
+  IfNode line=36 column=1
+    condition:
+      BinaryNode line=36 column=32 operator=and
+        left:
+          BooleanNode line=36 column=25 value=false
+        right:
+          CallNode line=36 column=40 name=права_частина
+            arguments: []
+    then_body:
+      BlockNode line=37 column=5
+        PrintNode line=37 column=5
+          value:
+            StringNode line=37 column=18 value="сюди не зайде"
+    else_body: None
+  DeclarationNode line=39 column=1 name=н type=i32 mutable=true
+    initializer:
+      IntegerNode line=39 column=53 value=0
+  WhileNode line=40 column=1
+    condition:
+      CallNode line=40 column=29 name=умова_циклу
+        arguments:
+          IdentifierNode line=40 column=51 name=н
+    body:
+      BlockNode line=41 column=5
+        AssignmentNode line=41 column=5 name=н
+          value:
+            BinaryNode line=41 column=43 operator=add
+              left:
+                IdentifierNode line=41 column=40 name=н
+              right:
+                IntegerNode line=41 column=52 value=1
+  DeclarationNode line=44 column=1 name=ліва type=i32 mutable=false
+    initializer:
+      ReadNode line=44 column=53
+  PrintNode line=45 column=1
+    value:
+      BinaryNode line=45 column=67 operator=add
+        left:
+          BinaryNode line=45 column=43 operator=add
+            left:
+              BinaryNode line=45 column=24 operator=add
+                left:
+                  IdentifierNode line=45 column=15 name=ліва
+                right:
+                  IdentifierNode line=45 column=33 name=ліва
+            right:
+              CallNode line=45 column=52 name=перший
+                arguments: []
+        right:
+          CallNode line=45 column=76 name=другий
+            arguments:
+              IntegerNode line=45 column=89 value=1

@@ -14,6 +14,49 @@ COMPILER = ROOT / "compiler.py"
 LEXER = ROOT / "lexer.py"
 
 
+class OptimizeFlagTest(unittest.TestCase):
+    SOURCE = "маю дєло ф() на виході дрібняк\n    тримай 1\nпорішали\nбазарь 1\n".encode()
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.source = Path(self.directory.name) / "in.bazar"
+        self.source.write_bytes(self.SOURCE)
+        self.output = Path(self.directory.name) / "out.ll"
+
+    def run_cli(self, *arguments):
+        return subprocess.run([sys.executable, str(COMPILER), *arguments], capture_output=True, timeout=60)
+
+    def test_flag_works_anywhere_on_the_command_line(self):
+        source, output = str(self.source), str(self.output)
+        for arguments in (("--optimize", source, output), (source, "--optimize", output),
+                          (source, output, "--optimize")):
+            with self.subTest(arguments=arguments):
+                self.output.unlink(missing_ok=True)
+                self.assertEqual(self.run_cli(*arguments).returncode, 0)
+                self.assertTrue(self.output.exists())
+
+    def test_with_ast_prints_the_tree_after_the_optimizer(self):
+        for arguments in (("--optimize", "--ast", str(self.source)), (str(self.source), "--ast", "--optimize")):
+            with self.subTest(arguments=arguments):
+                result = self.run_cli(*arguments)
+                self.assertEqual(result.returncode, 0)
+                self.assertNotIn(b"FunctionNode", result.stdout)
+
+    def test_expression_too_deep_is_one_error_line_and_no_traceback(self):
+        self.source.write_bytes(("зуб даю х тіпа крупняк це 1" + " плюс 1" * 3000 + "\n").encode())
+        for flags in ((), ("--optimize",)):
+            with self.subTest(flags=flags):
+                result = self.run_cli(*flags, str(self.source), str(self.output))
+                self.assertEqual(result.returncode, 1)
+                self.assertEqual(result.stderr.count(b"\n"), 1)
+                self.assertTrue(result.stderr.startswith(b"compilation error: line 1:1: "))
+                self.assertFalse(self.output.exists())
+
+    def test_ast_without_the_flag_prints_the_tree_as_parsed(self):
+        self.assertIn(b"FunctionNode", self.run_cli("--ast", str(self.source)).stdout)
+
+
 class CliTest(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()

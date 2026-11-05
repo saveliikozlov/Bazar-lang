@@ -5,8 +5,9 @@ style, as if a cheeky friend were explaining programming beside a garage.
 `желєзобетонно` declares a compile-time constant, `зуб даю` an immutable
 variable, `мутна тєма` a mutable one, and `перевзувся` assigns a new value.
 Conditions start with `якшо реально`, may have an `а нє` branch, and end with
-`отакої`. Functions start with `маю дєло`, structures with `такі діла`, and
-both end with `порішали`. Source files use `.bazar`.
+`отакої`. Loops start with `крутимось` and end with `докрутились`. Functions
+start with `маю дєло`, structures with `такі діла`, and both end with
+`порішали`. Source files use `.bazar`.
 
 The compiler reads UTF-8 source, checks lexical and syntactic structure,
 runs a semantic pass over the AST, and generates LLVM IR through the
@@ -38,7 +39,7 @@ Compile a program to LLVM IR, then run it with `lli`, or build a binary with
 ```sh
 .venv/bin/python compiler.py tests/run/point_read.bazar point_read.ll
 /opt/homebrew/opt/llvm/bin/lli point_read.ll < tests/run/point_read.in
-/opt/homebrew/opt/llvm/bin/llc -filetype=obj point_read.ll -o point_read.o
+/opt/homebrew/opt/llvm/bin/llc -relocation-model=pic -filetype=obj point_read.ll -o point_read.o
 clang point_read.o -o point_read
 ./point_read < tests/run/point_read.in
 ```
@@ -57,7 +58,7 @@ Input files may have any extension, including `.bazar` and `.txt`.
 | Result | Exit code | stdout | stderr | output.ll |
 | --- | --- | --- | --- | --- |
 | success | 0 | AST dump (`--ast`) or empty | empty | written |
-| lexical, syntax, or semantic error | 1 | empty | one line: `compilation error: line L:C: MESSAGE` | not written |
+| lexical, syntax, or semantic error, or an expression too deep to compile | 1 | empty | one line: `compilation error: line L:C: MESSAGE` | not written |
 | invalid arguments, unreadable input, unwritable output, no `llvmlite` | 2 | empty | one line | not written |
 
 ```text
@@ -151,6 +152,85 @@ condition; each nested condition has its own closing word.
 
 The first `реально` belongs to the opening phrase, so an always-true
 condition is `якшо реально реально`.
+
+## Loops
+
+The feature of Stage 3. `крутимось` ("we keep spinning") opens a loop and
+`докрутились` ("we've spun enough") closes it. `харе` ("enough!") leaves the
+innermost loop.
+
+`крутимось поки` checks its condition before every pass. This program
+([examples/loop_countdown.bazar](examples/loop_countdown.bazar)) reads a number
+and counts down; with input `3` it prints `3`, `2`, `1`, `Поїхали!`:
+
+```text
+мутна тєма н тіпа дрібняк це ану кажи
+крутимось поки н більше 0
+    базарь н
+    перевзувся н тепер н мінус 1
+докрутились
+базарь "Поїхали!"
+```
+
+`крутимось NAME тіпа TYPE від A по B` runs its counter over an integer range,
+with both ends included. This program
+([examples/loop_primes.bazar](examples/loop_primes.bazar)) has a loop inside a
+loop, a variable declared in the body, and `харе`; it prints the primes up to 20:
+
+```text
+крутимось число тіпа дрібняк від 2 по 20
+    мутна тєма просте тіпа базар це реально
+    крутимось дільник тіпа дрібняк від 2 по число мінус 1
+        якшо реально (число ділити на дільник) на дільник рівно число
+            перевзувся просте тепер гон
+            харе
+        отакої
+    докрутились
+    якшо реально просте
+        базарь число
+    отакої
+докрутились
+```
+
+`від` and `по` are not reserved: they mean something only in a loop header and
+stay ordinary names everywhere else, so Stage 2 programs that use them remain
+valid [`loop_range_words_stay_names`]. The four new reserved words are
+`крутимось`, `поки`, `докрутились`, and `харе`.
+
+### Loops in the IR
+
+This is the output for a loop that prints `к` from 1 to 3
+(`крутимось к тіпа дрібняк від 1 по 3`):
+
+```llvm
+body:
+  store i32 1, i32* %"к"
+  %".3" = icmp sle i32 1, 3
+  br i1 %".3", label %"for.body", label %"for.end"
+for.body:
+  %"к.1" = load i32, i32* %"к"
+  %".5" = call i32 (i8*, ...) @"printf"(i8* getelementptr ([4 x i8], [4 x i8]* @"str.0", i32 0, i32 0), i32 %"к.1")
+  br label %"for.step"
+for.step:
+  %"к.2" = load i32, i32* %"к"
+  %".7" = icmp eq i32 %"к.2", 3
+  br i1 %".7", label %"for.end", label %"for.next"
+for.next:
+  %".9" = add nsw i32 %"к.2", 1
+  store i32 %".9", i32* %"к"
+  br label %"for.body"
+for.end:
+  ret i32 0
+```
+
+The first block stores the start in the counter's alloca and skips the loop
+when the start is above the end. `for.step` compares the counter with the end
+before it grows, so a range ending at the type's largest value stops without
+overflow; only when another pass remains does `for.next` add 1. The
+`br label %"for.body"` at the end of `for.next` is the back edge, the only jump
+backwards, and `харе` is a plain `br` to `for.end`. A `крутимось поки` has three
+blocks, `while.cond`, `while.body`, and `while.end`, and its back edge goes from
+the body to `while.cond`.
 
 ## Functions
 
@@ -393,6 +473,39 @@ that follows it and one in `tests/invalid` that breaks it (named in brackets).
     [`runtime_overflow`, `runtime_division_by_zero`,
     `semantic_constant_overflow`, `semantic_constant_division_by_zero`].
 
+**Loops**
+
+26. The condition of `крутимось поки` is a `базар`, with no implicit
+    conversion [`loop_while_countdown` / `loop_condition_not_bool`].
+27. A range loop states the counter's type, which is `дрібняк` or `крупняк`.
+    Both bounds have exactly that type. They are evaluated once, the start
+    first, before the first pass, and they cannot see the counter
+    [`loop_for_inclusive_range` / `loop_counter_not_integer`,
+    `loop_counter_structure_type`, `loop_counter_unknown_type`,
+    `loop_bound_wrong_type`, `loop_bound_literal_too_large`,
+    `loop_bound_sees_no_counter`].
+28. The counter cannot be assigned. The counter and the outer block of the
+    body are one scope, so a local cannot redeclare it, and the counter is
+    invisible after the loop [`loop_counter_assigned`,
+    `loop_body_redeclares_counter`, `loop_counter_invisible_after`].
+29. A range includes both ends. A start above the end means no pass at all. A
+    range ending at the largest value of its type stops without overflow
+    [`loop_for_inclusive_range`, `loop_for_at_type_maximum`].
+30. The body is nonempty and is a child scope: an inner declaration may shadow
+    an outer one, it is invisible after the loop, and it is initialized again
+    on every pass [`loop_body_declares_variable` / `loop_empty_body`,
+    `loop_body_variable_invisible_after`].
+31. `харе` is allowed only inside a loop, directly or in a nested `якшо`, and
+    leaves only the innermost loop. A function body starts outside any loop,
+    even when the function is called from one. Nothing follows `харе` in its
+    block [`loop_nested_with_break` / `loop_break_outside`,
+    `loop_break_in_condition_outside`, `loop_break_in_function_body`,
+    `loop_statement_after_break`].
+32. A loop never counts as "every path ends with `тримай`", not even
+    `крутимось поки реально`, so a function still needs a `тримай` after it.
+    `тримай` and `всьо розходимось` may leave from inside a loop
+    [`loop_leaves_function_and_program` / `loop_function_needs_return_after`].
+
 ## Code generation
 
 [codegen.py](codegen.py) builds the module with `llvmlite.ir`; the only IR
@@ -409,8 +522,145 @@ text the compiler writes is `str(module)`.
   bodies and linked by `clang`. Format strings are private global constants.
   Printing an object walks the field table with one `gep`, `load`, and
   `printf` per field, so a new structure prints without new compiler code.
-- **Variables** are allocas in the function's entry block. Arithmetic uses
-  the `llvm.s*.with.overflow` intrinsics.
+- **Variables** are allocas in the function's entry block, so a loop body that
+  declares a variable does not grow the stack. Arithmetic uses the
+  `llvm.s*.with.overflow` intrinsics.
+- **Loops** are basic blocks with a back edge; see [Loops in the IR](#loops-in-the-ir).
+
+## Optimizer
+
+`--optimize`, anywhere on the command line, runs [optimizer.py](optimizer.py) on
+the checked tree before code generation. Together with `--ast` it prints the
+tree after the optimizer. A program prints the same with and without the flag,
+run-time errors included, because moved nodes keep their line and column. The
+three transformations repeat until a whole round changes nothing, since each
+can give work to the others.
+
+```sh
+.venv/bin/python compiler.py --optimize programs/bank.txt bank.ll
+.venv/bin/python compiler.py --optimize --ast tests/optimize/inline_simple.bazar
+```
+
+**Unused variables.** A declaration nobody reads is removed with its
+assignments, so its `alloca` disappears from the IR, and this repeats because a
+removal can leave another variable unread. Names are compared by the symbol the
+semantic pass resolved, not by spelling, so a shadowing variable and the one it
+hides are never confused. An assignment through `п.х` writes `п`, it does not
+read it. Writing `х` from its own old value counts as reading it. Parameters,
+loop counters, and constants are not removed. A variable stays when any value
+it receives cannot be dropped: a call or `ану кажи` is never dropped, and
+neither is arithmetic that could stop the program with an overflow or a division
+by zero, since that error is output too. Arithmetic on values known at compile
+time is checked and can be dropped, so `2 плюс 3 на 4` goes.
+
+**Unused functions.** A function or member function that cannot be reached from
+the main program is removed with its whole body. Following calls from the main
+program means a chain of functions goes at once, and so do functions that only
+call each other.
+
+**Inlining.** A top-level function called exactly once is replaced by its body
+in front of the statement that calls it. Each parameter becomes a local
+declaration initialised with the argument, its `тримай` becomes a local whose
+value stands where the call stood, and its locals are renamed `NAME.FUNCTION.N`.
+A `.` cannot occur in a source name, so these cannot collide with the caller's.
+The function is then removed as unused.
+
+| Left alone | Why |
+| --- | --- |
+| a recursive function, directly or through others | its body would contain its own call |
+| a member function | its body uses the fields of its object |
+| a `тримай` anywhere but the last line, such as inside `якшо` or a loop | it would need a jump out of the middle of the caller |
+| a call in the condition of `крутимось поки` | the condition runs on every pass, the moved body only once |
+| a call on the right of `і ше` or `або` | it may never run |
+| a call after something that is not a plain value, as in `ф() плюс г()` for `г` | the moved body would run first and change the order of effects |
+
+For this program, `другий` is called once, its parameter `перший` is never read,
+and nobody reads `зайва`:
+
+```text
+маю дєло другий(перший тіпа дрібняк, другий тіпа дрібняк) на виході дрібняк
+    тримай другий
+порішали
+зуб даю зайва тіпа дрібняк це 5
+базарь другий(1, 2)
+```
+
+Before, without the flag:
+
+```llvm
+define i32 @"bz.другий"(i32 %"перший", i32 %"другий")
+{
+entry:
+  %"перший.1" = alloca i32
+  %"другий.1" = alloca i32
+  br label %"body"
+body:
+  store i32 %"перший", i32* %"перший.1"
+  store i32 %"другий", i32* %"другий.1"
+  %"другий.2" = load i32, i32* %"другий.1"
+  ret i32 %"другий.2"
+}
+define i32 @"main"()
+{
+entry:
+  %"зайва" = alloca i32
+  br label %"body"
+body:
+  store i32 5, i32* %"зайва"
+  %".3" = call i32 @"bz.другий"(i32 1, i32 2)
+  %".4" = call i32 (i8*, ...) @"printf"(i8* getelementptr ([4 x i8], [4 x i8]* @"str.0", i32 0, i32 0), i32 %".3")
+  ret i32 0
+}
+```
+
+After, with `--optimize`: the function, the call, and both unused slots are gone.
+
+```llvm
+define i32 @"main"()
+{
+entry:
+  %"другий.другий.1" = alloca i32
+  %"результат.другий.1" = alloca i32
+  br label %"body"
+body:
+  store i32 2, i32* %"другий.другий.1"
+  %"другий.другий.1.1" = load i32, i32* %"другий.другий.1"
+  store i32 %"другий.другий.1.1", i32* %"результат.другий.1"
+  %"результат.другий.1.1" = load i32, i32* %"результат.другий.1"
+  %".4" = call i32 (i8*, ...) @"printf"(i8* getelementptr ([4 x i8], [4 x i8]* @"str.0", i32 0, i32 0), i32 %"результат.другий.1.1")
+  ret i32 0
+}
+```
+
+## The real program: Bazar Bank
+
+[programs/bank.txt](programs/bank.txt) is a small bank account you use from the
+keyboard. It asks for an account number, then shows a menu: deposit, withdraw,
+show the account, forecast compound interest, or leave. It uses the structures
+`Рахунок` and `Прогноз`, member functions that change the balance, and the
+functions `запитай` and `покажи_меню`.
+
+Loops carry the whole program: the menu is a `крутимось поки реально` left with
+`харе`, `запитай` repeats its question in a `крутимось поки реально` until the
+answer fits, and the forecast is a range loop over the months. Amounts have
+limits, so the forecast cannot overflow. Typing 0 cancels any question. The end
+of input reads as 0, and so does text that is not a number, so neither can hang
+the program. It prints each prompt on its own line.
+
+Build it into a native binary and replay each recorded session:
+
+```sh
+.venv/bin/python compiler.py programs/bank.txt bank.ll
+llc -relocation-model=pic -filetype=obj bank.ll -o bank.o
+clang bank.o -o bank
+./bank < programs/bank.in      # deposit, withdraw, show, forecast, leave
+./bank < programs/bank_2.in    # rejected, cancelled, and overdrawn answers
+./bank < programs/bank_3.in    # the input ends without choosing to leave
+./bank                         # or use it yourself
+```
+
+Each session's exact output is in `programs/NAME.expected`, and `check.py`
+builds the binary and compares it.
 
 ## Source format
 
@@ -470,13 +720,17 @@ exits nonzero if any did:
 
 | Folder | Count | Check |
 | --- | --- | --- |
-| `tests/valid` | 48 | `--ast` output equals `NAME.ast` (front-end tests; some Stage 1 ones use undeclared names on purpose) |
-| `tests/invalid` | 203 | compiling exits 1, prints exactly `NAME.err`, and writes no file |
-| `tests/run` | 19 | end to end: compiled, run with `lli` (or built with `llc` and `clang`), stdout equals `NAME.expected`; `NAME.in` is stdin; `NAME.error` is the expected run-time error |
-| `examples` | 8 | compiling succeeds |
+| `tests/valid` | 49 | `--ast` output equals `NAME.ast` (front-end tests; some Stage 1 ones use undeclared names on purpose); with `--optimize`, it equals `NAME.optimized.ast` when the optimizer changes the tree, or `NAME.optimized.err` for the 16 that stop in the semantic pass |
+| `tests/invalid` | 231 | compiling exits 1, prints exactly `NAME.err`, and writes no file |
+| `tests/run` | 29 | end to end: compiled, run with `lli` (or built with `llc` and `clang`), stdout equals `NAME.expected`; `NAME.in` is stdin; `NAME.error` is the expected run-time error |
+| `examples` | 10 | compiling succeeds |
+| `programs` | 3 sessions | built with `llc` and `clang`; the native binary's stdout equals the session's `.expected` |
+| `tests/optimize` | 8 | `--optimize --ast` output equals `NAME.ast`, and stdout equals `NAME.expected` with and without the flag; `NAME.in` and `NAME.error` as in `tests/run` |
+
+The `tests/valid`, `tests/invalid`, `tests/run`, `examples`, and `programs` checks each run twice, without the flag and with `--optimize`. In `tests/valid`, 22 trees are unchanged by the optimizer and still equal `NAME.ast`; 11 change (unused declarations and functions removed, `покажи` inlined), and their trees are in `NAME.optimized.ast`; 16 deliberately use undeclared names, so they stop in the semantic pass before the optimizer and print the same error as without the flag, pinned in `NAME.optimized.err`.
 
 LLVM tools are looked up in `$LLVM_BIN`, then on `PATH`, then in the
-Homebrew folders. The 96 unit tests cover the lexer, the parser, the semantic
+Homebrew folders. The 100 unit tests cover the lexer, the parser, the semantic
 pass's symbol table and annotations, and the CLI.
 
 ## VS Code extension
@@ -509,9 +763,11 @@ lexer.py       byte-oriented lexer state machine
 parser.py      recursive-descent parser, one method per grammar rule
 ast_nodes.py   AST classes and stable dump
 semantic.py    semantic pass and symbol table
+optimizer.py   the transformations behind --optimize
 codegen.py     LLVM IR through the llvmlite builder
 compiler.py    command-line interface
 check.py       test runner: AST, errors, and end-to-end runs
 examples/      sample programs
 tests/         fixtures, expected results, and unit tests
+programs/      the real program and its recorded sessions
 ```

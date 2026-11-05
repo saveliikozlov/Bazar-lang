@@ -1,0 +1,64 @@
+ProgramNode line=2 column=1
+  FunctionNode line=5 column=1 name=потрібна result=i32
+    parameters:
+      ParameterNode line=5 column=34 name=н type=i32
+    body:
+      BlockNode line=6 column=5
+        IfNode line=6 column=5
+          condition:
+            BinaryNode line=6 column=32 operator=lt
+              left:
+                IdentifierNode line=6 column=29 name=н
+              right:
+                IntegerNode line=6 column=43 value=1
+          then_body:
+            BlockNode line=7 column=9
+              ReturnNode line=7 column=9
+                value:
+                  IntegerNode line=7 column=22 value=0
+          else_body: None
+        ReturnNode line=9 column=5
+          value:
+            BinaryNode line=9 column=52 operator=add
+              left:
+                CallNode line=9 column=18 name=потрібна
+                  arguments:
+                    BinaryNode line=9 column=38 operator=sub
+                      left:
+                        IdentifierNode line=9 column=35 name=н
+                      right:
+                        IntegerNode line=9 column=49 value=1
+              right:
+                IdentifierNode line=9 column=61 name=н
+  StructureNode line=11 column=1 name=Коробка
+    fields:
+      FieldNode line=12 column=5 name=значення type=i32 mutable=false index=0
+        default: None
+    methods:
+      FunctionNode line=16 column=5 name=подвоєне result=i32
+        parameters: []
+        body:
+          BlockNode line=17 column=9
+            ReturnNode line=17 column=9
+              value:
+                BinaryNode line=17 column=39 operator=mul
+                  left:
+                    IdentifierNode line=17 column=22 name=значення
+                  right:
+                    IntegerNode line=17 column=44 value=2
+  DeclarationNode line=20 column=1 name=к type=Коробка mutable=false
+    initializer:
+      NewObjectNode line=20 column=47 structure=Коробка
+        arguments:
+          IntegerNode line=20 column=77 value=4
+  PrintNode line=21 column=1
+    value:
+      MemberCallNode line=21 column=17 method=подвоєне
+        object:
+          IdentifierNode line=21 column=14 name=к
+        arguments: []
+  PrintNode line=22 column=1
+    value:
+      CallNode line=22 column=14 name=потрібна
+        arguments:
+          IntegerNode line=22 column=31 value=3

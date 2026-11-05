@@ -76,6 +76,22 @@ test("conditions: phrases, individual words, and closing word", async () => {
   assert.strictEqual((await map('якшо реальне'))['реальне'], 'variable.other.bazar');
 });
 
+test("loops: openers, closer, break, and range words only in a header", async () => {
+  const loop = 'keyword.control.loop.bazar';
+  assert.deepStrictEqual((await scopes('крутимось поки реально')).map((t) => t[1]),
+    [loop, loop, 'constant.language.boolean.bazar']);
+  const header = await map('крутимось к тіпа дрібняк від 1 по 10');
+  assert.strictEqual(header['крутимось'], loop);
+  assert.strictEqual(header['від'], loop);
+  assert.strictEqual(header['по'], loop);
+  assert.strictEqual((await map('докрутились'))['докрутились'], loop);
+  assert.strictEqual((await map('харе'))['харе'], loop);
+  // від and по are ordinary names outside a loop header
+  assert.strictEqual((await map('базарь від'))['від'], 'variable.other.bazar');
+  assert.strictEqual((await map('базарь по'))['по'], 'variable.other.bazar');
+  assert.strictEqual((await map('крутимосьб'))['крутимосьб'], 'variable.other.bazar');
+});
+
 test("output, exit, and operators", async () => {
   assert.strictEqual((await map('базарь 1'))['базарь'], 'support.function.print.bazar');
   assert.deepStrictEqual((await scopes('всьо розходимось 0')).map((t) => t[1]),

@@ -10,10 +10,10 @@ the final byte.
 
 from ast_nodes import (
     AssignmentNode, BinaryNode, BlockNode, BooleanNode, CallNode, CallStatementNode,
-    ConstantDeclarationNode, DeclarationNode, ExitNode, FieldAccessNode, FieldAssignmentNode,
-    FieldNode, FunctionNode, IdentifierNode, IfNode, IntegerNode, MemberCallNode, NewObjectNode,
-    ParameterNode, PrintNode, ProgramNode, ReadNode, ReturnNode, StringNode, StructureNode,
-    UnaryNode,
+    BreakNode, ConstantDeclarationNode, DeclarationNode, ExitNode, FieldAccessNode,
+    FieldAssignmentNode, FieldNode, ForNode, FunctionNode, IdentifierNode, IfNode, IntegerNode,
+    MemberCallNode, NewObjectNode, ParameterNode, PrintNode, ProgramNode, ReadNode, ReturnNode,
+    StringNode, StructureNode, UnaryNode, WhileNode,
 )
 from lexer import (COMMA, DOT, EOF, I64_MIN_MAGNITUDE, IDENT, INTEGER, KEYWORD, KEYWORDS, LPAREN,
                    NEWLINE, RPAREN, STRING, lex)
@@ -27,6 +27,9 @@ LATIN_LOOKALIKES = str.maketrans("aceiopxy", "асеіорху")
 # Limit combined parenthesis/condition nesting so pathological input raises
 # a diagnostic instead of exhausting Python recursion. Not a language rule.
 MAX_NESTING = 100
+
+# A block ends when one of these words starts a line.
+BLOCK_CLOSERS = ("а", "отакої", "порішали", "докрутились")
 
 
 class CompilationError(Exception):
@@ -102,6 +105,13 @@ class Parser:
             raise self.error(message.format(found=describe(self.peek())))
         return self.eat()
 
+    def expect_range_word(self, word, message):
+        """від and по are names everywhere else: only a loop header reads them as words."""
+        token = self.peek()
+        if token.kind != IDENT or token.text != word:
+            raise self.error(message.format(found=describe(token)))
+        return self.eat()
+
     def expect_name(self, phrase):
         token = self.peek()
         if token.kind == KEYWORD:
@@ -174,6 +184,14 @@ class Parser:
                 return self.parse_return_statement()
             if token.text == "якшо":
                 return self.parse_if_statement()
+            if token.text == "крутимось":
+                return self.parse_loop_statement()
+            if token.text == "харе":
+                return self.parse_break_statement()
+            if token.text == "поки":
+                raise self.error("«Поки» саме не ходить: цикл починається з «крутимось поки».")
+            if token.text == "докрутились":
+                raise self.error("«Докрутились» без «крутимось»? Закривати нічого.")
             if token.text == "а":
                 raise self.error("«А нє» без «якшо»? Ти з ким спориш?")
             if token.text == "нє":
@@ -317,19 +335,69 @@ class Parser:
         self.leave()
         return IfNode(first.line, first.column, condition, then_body, else_body)
 
+    def parse_loop_statement(self):
+        # loop_statement = while_loop | for_loop
+        first = self.eat()
+        if self.at_keyword("поки"):
+            return self.parse_while_loop(first)
+        return self.parse_for_loop(first)
+
+    def parse_while_loop(self, first):
+        # "крутимось", "поки", expression, NEWLINE, block, "докрутились"
+        self.eat()
+        if self.at(NEWLINE) or self.at(EOF):
+            raise self.error("Умову загубив після «крутимось поки». "
+                             "Для вічного циклу пиши «крутимось поки реально».")
+        self.enter(first)
+        condition = self.parse_expression()
+        self.expect(NEWLINE, "Умова скінчилась, а далі {found}? Тіло циклу пиши з нового рядка.")
+        return WhileNode(first.line, first.column, condition, self.parse_loop_body(first))
+
+    def parse_for_loop(self, first):
+        # "крутимось", IDENT, "тіпа", type, "від", expression, "по", expression,
+        # NEWLINE, block, "докрутились"
+        name = self.expect_name("«крутимось»")
+        self.expect_keyword("тіпа", f"Де «тіпа», шеф? Після лічильника «{name.text}» треба вказати тип, "
+                                    f"а тут {{found}}.")
+        type_at = self.peek()
+        declared_type = self.parse_type()
+        self.expect_range_word("від", "Звідки крутимось? Після типу чекаю «від» і початок, а тут {found}.")
+        self.enter(first)
+        start = self.parse_expression()
+        self.expect_range_word("по", "Докуди крутимось? Після початку чекаю «по» і кінець, а тут {found}.")
+        end = self.parse_expression()
+        self.expect(NEWLINE, "Заголовок циклу скінчився, а далі {found}? Тіло циклу пиши з нового рядка.")
+        body = self.parse_loop_body(first)
+        node = ForNode(first.line, first.column, name.text, declared_type, start, end, body)
+        node.type_at = type_at
+        return node
+
+    def parse_loop_body(self, opener):
+        """The block of a loop and its closer; ends the nesting level the header entered."""
+        body = self.parse_block(opener, "loop")
+        self.expect_keyword("докрутились", f"Де «докрутились»? Цикл із рядка {opener.line}:{opener.column} "
+                                           f"відкрив, а закрити забув, тут {{found}}.")
+        self.leave()
+        return body
+
+    def parse_break_statement(self):
+        # "харе"
+        first = self.eat()
+        return BreakNode(first.line, first.column)
+
     def parse_block(self, opener, branch):
         # block = { NEWLINE }, statement, NEWLINE, { NEWLINE | ( statement, NEWLINE ) }
         while self.at(NEWLINE):
             self.eat()
-        if self.at_keyword("а", "отакої", "порішали") or self.at(EOF):
-            kind = "«якшо реально»" if branch == "if" else "«а нє»"
+        if self.at_keyword(*BLOCK_CLOSERS) or self.at(EOF):
+            kind = {"if": "«якшо реально»", "else": "«а нє»", "loop": "«крутимось»"}[branch]
             raise self.error(f"Блок {kind} пустий. Хотів шось зробить чи просто зайшов?")
         first = self.peek()
         statements = [self.parse_block_statement(opener)]
         while True:
             if self.at(NEWLINE):
                 self.eat()
-            elif self.at_keyword("а", "отакої", "порішали") or self.at(EOF):
+            elif self.at_keyword(*BLOCK_CLOSERS) or self.at(EOF):
                 break
             else:
                 statements.append(self.parse_block_statement(opener))
@@ -338,6 +406,9 @@ class Parser:
         return BlockNode(first.line, first.column, statements)
 
     def unclosed_if(self, opener):
+        if opener.text == "крутимось":
+            return self.error(f"Де «докрутились»? Цикл із рядка {opener.line}:{opener.column} "
+                              f"не закритий, а файл уже скінчився.")
         return self.error(f"Де «отакої»? Базар із рядка {opener.line}:{opener.column} "
                           f"не закритий, а файл уже скінчився.")
 

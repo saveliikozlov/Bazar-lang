@@ -28,6 +28,9 @@ Each statement occupies one physical line. `якшо реально`, `маю д
 | `базарь EXPR` | print a value; literally talk | `print(e)` |
 | `всьо розходимось EXPR` | exit; literally everyone, go home | `exit(e)` |
 | `якшо реально EXPR` … `а нє` … `отакої` | condition with an optional else branch | `if e { … } else { … }` |
+| `крутимось поки EXPR` … `докрутились` | loop while a condition holds; literally we keep spinning | `while e { … }` |
+| `крутимось NAME тіпа TYPE від A по B` … `докрутились` | loop over an inclusive integer range | `for name in a..=b { … }` |
+| `харе` | leave the innermost loop; literally enough | `break` |
 | `перевзувся NAME.FIELD… тепер EXPR` | assignment to a field through a mutable chain | `o.f = e` |
 | `тримай EXPR` | leave the function with a value; literally here, hold it | `return e` |
 | `NAME(ARGS)`, `OBJ.NAME(ARGS)` | a call on its own line | `f(a)`, `o.m(a)` |
@@ -132,7 +135,8 @@ Operators are listed from **highest** to lowest precedence:
 - **Reserved words** are the individual words of every phrase:
   `желєзобетонно зуб даю мутна тєма тіпа це дрібняк крупняк базар перевзувся тепер базарь
   всьо розходимось якшо реально а нє отакої гон або і ше рівно не більше менше
-  плюс мінус на ділити чутки`.
+  плюс мінус на ділити маю дєло виході тримай порішали такі діла склепай ану кажи
+  крутимось поки докрутились харе чутки`. `від` and `по` are not reserved.
   `тіпа` is entirely Cyrillic: `тіпa` with a final Latin `a` is an identifier,
   rather than the keyword.
 - **Integers.** One or more decimal ASCII digits; leading zeros are allowed.

@@ -62,7 +62,9 @@ statement = immutable_declaration
           | exit_statement
           | return_statement
           | call_statement
-          | if_statement ;
+          | if_statement
+          | loop_statement
+          | break_statement ;
 
 (* "зуб даю" declares an immutable variable: it is assigned exactly once,
    but its initializer may be any expression evaluated at run time. *)
@@ -106,11 +108,36 @@ if_statement = "якшо", "реально", expression, NEWLINE,
                [ "а", "нє", NEWLINE, block ],
                "отакої" ;
 
+(* "крутимось" ("we keep spinning") opens a loop and "докрутились" ("we have
+   spun enough") closes it on its own line. The body contains at least one
+   statement. Each nested loop has its own closer. *)
+loop_statement = while_loop | for_loop ;
+
+(* "крутимось поки": the condition is evaluated before every pass. *)
+while_loop = "крутимось", "поки", expression, NEWLINE,
+             block,
+             "докрутились" ;
+
+(* A range loop: the counter takes every value from the first expression
+   through the second, both included. RANGE_FROM and RANGE_TO are the words
+   "від" and "по". They are not reserved: everywhere else they are ordinary
+   names, so Stage 2 programs that use them stay valid. *)
+for_loop = "крутимось", IDENT, "тіпа", type,
+           RANGE_FROM, expression, RANGE_TO, expression, NEWLINE,
+           block,
+           "докрутились" ;
+RANGE_FROM = ? an IDENT token whose text is exactly від ? ;
+RANGE_TO = ? an IDENT token whose text is exactly по ? ;
+
+(* "харе" ("enough!") leaves the innermost loop. The grammar accepts it
+   wherever a statement is; the semantic stage allows it only inside a loop. *)
+break_statement = "харе" ;
+
 (* A block is a nonempty sequence of statements. EVERY statement inside
    a block, including nested if_statement, ends with NEWLINE. Blank and
    comment-only lines may occur anywhere. A block ends when the parser sees
-   "а", "отакої", or "порішали" at line start. Indentation is ignored as
-   horizontal space. *)
+   "а", "отакої", "порішали", or "докрутились" at line start. Indentation is
+   ignored as horizontal space. *)
 block = { NEWLINE },
         statement, NEWLINE,
         { NEWLINE | ( statement, NEWLINE ) } ;
@@ -321,7 +348,8 @@ keyword = "желєзобетонно"
         | "гон" | "або" | "і" | "ше" | "рівно" | "не" | "більше" | "менше"
         | "плюс" | "мінус" | "на" | "ділити"
         | "маю" | "дєло" | "виході" | "тримай" | "порішали"
-        | "такі" | "діла" | "склепай" | "ану" | "кажи" ;
+        | "такі" | "діла" | "склепай" | "ану" | "кажи"
+        | "крутимось" | "поки" | "докрутились" | "харе" ;
 
 reserved_word = keyword | "чутки" ;
 
