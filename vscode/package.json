@@ -74,7 +74,8 @@
           "strings": false
         },
         "editor.suggest.snippetsPreventQuickSuggestions": false,
-        "editor.wordBasedSuggestions": "off"
+        "editor.wordBasedSuggestions": "off",
+        "editor.unicodeHighlight.ambiguousCharacters": false
       }
     },
     "commands": [

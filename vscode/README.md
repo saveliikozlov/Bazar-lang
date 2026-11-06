@@ -50,6 +50,12 @@ and checker error messages remain Ukrainian/surzhyk.
 | `bazar.pythonPath` | `python3` | interpreter for code checking, launched without a shell |
 | `bazar.diagnostics.enabled` | `true` | enable error underlines |
 
+In `.bazar` files the extension also turns off
+`editor.unicodeHighlight.ambiguousCharacters`. Cyrillic letters such as `А`,
+`О`, `Р`, and `і` look like Latin ones, so VS Code would otherwise draw a
+yellow box around them in almost every line. Set it back to `true` under
+`"[bazar]"` in your settings to see the boxes again.
+
 If Python is missing or too old, the extension warns once and logs details to
 the Bazar output channel, without inventing underlines. Changing the setting
 rechecks files. **Bazar: Recheck Open Files** also triggers a manual recheck.

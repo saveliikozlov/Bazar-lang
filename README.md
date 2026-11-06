@@ -1070,6 +1070,9 @@ builds the binary and compares it.
 extra feature in one compiled program. It shows four goods with their codes,
 prices, and stock, reads a code and a quantity until you type 0, then prints a
 receipt with a discount.
+[programs/stall.bazar](programs/stall.bazar) is the same program with the
+`.bazar` extension, so the [VS Code extension](#vs-code-extension) highlights
+and checks it.
 
 | Feature | Where the stall uses it |
 | --- | --- |
