@@ -1064,6 +1064,39 @@ clang bank.o -o bank
 Each session's exact output is in `programs/NAME.expected`, and `check.py`
 builds the binary and compares it.
 
+## The second program: Bazar Stall
+
+[programs/stall.txt](programs/stall.txt) is a market stall that uses every
+extra feature in one compiled program. It shows four goods with their codes,
+prices, and stock, reads a code and a quantity until you type 0, then prints a
+receipt with a discount.
+
+| Feature | Where the stall uses it |
+| --- | --- |
+| arrays | the codes, prices, and stock are `[крупняк; ТОВАРІВ]` fields of `Лоток`, and the cart is `[всюди 0]` summed with `крутимось штук тіпа крупняк з кошик` |
+| `може` | `знайди` looks a code up in the array and returns `шось(к)` or `нема`; `знижка` returns `шось(10)`, `шось(5)`, or `нема`, read with `або 0` |
+| `вийде` | `продай` returns `вийшло(Покупка(…))` or `облом(1)`, `облом(2)`, or `облом(3)` for an unknown code, a bad quantity, or too little stock |
+| `розбери` | the main loop matches `вийшло(Покупка(товар, штук, сума))` and answers each `облом` in surzhyk, with guards (`якшо реально`) that tell zero from too many and sold out from too few, `номер_товару` turns a `може` into a `вийде`, and `рядок_чека` matches the item number to print its name |
+| `?` | `продай` starts with `номер_товару(код)?` and `перевірені_штуки(скільки)?`, so the first step that fails returns its `облом` |
+| `{…}` | the display, every answer, and the receipt, including whole arrays such as `{лоток.залишок}` |
+
+The end of input reads as 0 and goes to the till, so no session can hang the
+program. Build it and replay each recorded session:
+
+```sh
+.venv/bin/python compiler.py programs/stall.txt stall.ll
+llc -relocation-model=pic -filetype=obj stall.ll -o stall.o
+clang stall.o -o stall
+./stall < programs/stall.in      # three purchases and a 10% discount
+./stall < programs/stall_2.in    # unknown code, zero, negative, and too many, too little stock, sold out
+./stall < programs/stall_3.in    # leave with an empty cart
+./stall < programs/stall_4.in    # a 5% discount, and the input ends without 0
+./stall                          # or use it yourself
+```
+
+`check.py` replays these sessions like the bank's, with and without
+`--optimize`.
+
 ## Source format
 
 Source files use UTF-8 without a byte order mark.
