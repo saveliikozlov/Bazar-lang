@@ -1,0 +1,41 @@
+ProgramNode line=2 column=1
+  ConstantDeclarationNode line=2 column=1 name=Н type=i32
+    initializer:
+      IntegerNode line=2 column=60 value=2
+  DeclarationNode line=3 column=1 name=м type=[i32; 3] mutable=false
+    initializer:
+      ArrayLiteralNode line=3 column=52
+        elements:
+          IntegerNode line=3 column=53 value=1
+          UnaryNode line=3 column=56 operator=neg
+            operand:
+              IntegerNode line=3 column=67 value=2
+          IntegerNode line=3 column=70 value=3
+  DeclarationNode line=4 column=1 name=сітка type=[[bool; Н]; Н плюс (1 на 1)] mutable=false
+    initializer:
+      ArrayLiteralNode line=4 column=83
+        elements:
+          ArrayLiteralNode line=4 column=84
+            elements:
+              BooleanNode line=4 column=85 value=true
+              BooleanNode line=4 column=101 value=false
+          ArrayFillNode line=4 column=110
+            value:
+              BooleanNode line=4 column=122 value=false
+          ArrayFillNode line=4 column=131
+            value:
+              BooleanNode line=4 column=143 value=true
+  DeclarationNode line=5 column=1 name=нулі type=[i64; 007] mutable=false
+    initializer:
+      ArrayFillNode line=5 column=60
+        value:
+          IntegerNode line=5 column=72 value=0
+  PrintNode line=6 column=1
+    value:
+      IdentifierNode line=6 column=14 name=м
+  PrintNode line=7 column=1
+    value:
+      IdentifierNode line=7 column=14 name=сітка
+  PrintNode line=8 column=1
+    value:
+      IdentifierNode line=8 column=14 name=нулі

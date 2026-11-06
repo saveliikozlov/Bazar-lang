@@ -1,0 +1,76 @@
+ProgramNode line=2 column=1
+  StructureNode line=2 column=1 name=Мішок
+    fields:
+      FieldNode line=3 column=5 name=речі type=Option<[i32; 2]> mutable=false index=0
+        default: None
+    methods:
+      FunctionNode line=4 column=5 name=перша result=Option<i32>
+        parameters: []
+        body:
+          BlockNode line=5 column=9
+            ReturnNode line=5 column=9
+              value:
+                VariantNode line=5 column=22 variant=some
+                  value:
+                    IndexNode line=5 column=40
+                      object:
+                        TryNode line=5 column=39
+                          operand:
+                            IdentifierNode line=5 column=31 name=речі
+                      index:
+                        IntegerNode line=5 column=41 value=0
+  FunctionNode line=8 column=1 name=подвоєне result=Option<i32>
+    parameters:
+      ParameterNode line=8 column=34 name=з type=Option<Option<i32>>
+      ParameterNode line=8 column=80 name=м type=Мішок
+    body:
+      BlockNode line=9 column=5
+        CallStatementNode line=9 column=5 member_call=true
+          call:
+            TryNode line=9 column=20
+              operand:
+                MemberCallNode line=9 column=8 method=перша
+                  object:
+                    IdentifierNode line=9 column=5 name=м
+                  arguments: []
+        ReturnNode line=10 column=5
+          value:
+            VariantNode line=10 column=18 variant=some
+              value:
+                BinaryNode line=10 column=50 operator=add
+                  left:
+                    BinaryNode line=10 column=43 operator=mul
+                      left:
+                        UnaryNode line=10 column=27 operator=neg
+                          operand:
+                            TryNode line=10 column=41
+                              operand:
+                                TryNode line=10 column=40
+                                  operand:
+                                    IdentifierNode line=10 column=38 name=з
+                      right:
+                        IntegerNode line=10 column=48 value=2
+                  right:
+                    TryNode line=10 column=74
+                      operand:
+                        MemberCallNode line=10 column=62 method=перша
+                          object:
+                            IdentifierNode line=10 column=59 name=м
+                          arguments: []
+  PrintNode line=12 column=1
+    value:
+      CallNode line=12 column=14 name=подвоєне
+        arguments:
+          VariantNode line=12 column=31 variant=some
+            value:
+              VariantNode line=12 column=40 variant=some
+                value:
+                  IntegerNode line=12 column=49 value=3
+          NewObjectNode line=12 column=54 structure=Мішок
+            arguments:
+              VariantNode line=12 column=80 variant=some
+                value:
+                  ArrayLiteralNode line=12 column=89
+                    elements:
+                      IntegerNode line=12 column=90 value=5
+                      IntegerNode line=12 column=93 value=6

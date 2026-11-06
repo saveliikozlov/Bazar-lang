@@ -33,7 +33,13 @@ const ENTRIES = [
     snippet: 'крутимось поки ${1:реально}\n\t${2:харе}\nдокрутились' },
   { label: 'крутимось … від … по', dict: 'крутимось', words: ['крутимось'], kind: 'statement', detail: 'loop over an inclusive integer range',
     snippet: 'крутимось ${1:к} тіпа дрібняк від ${2:1} по ${3:10}\n\t${4:базарь к}\nдокрутились' },
+  { label: 'крутимось … з', dict: 'крутимось', words: ['крутимось'], kind: 'statement', detail: 'loop over the elements of an array',
+    snippet: 'крутимось ${1:е} тіпа ${2:дрібняк} з ${3:масив}\n\t${4:базарь е}\nдокрутились' },
   { label: 'докрутились', words: ['докрутились'], kind: 'statement', detail: 'close the loop', snippet: 'докрутились' },
+  { label: 'розбери', words: ['розбери'], kind: 'statement', detail: 'match closed by розібрали',
+    snippet: 'розбери ${1:значення}\nвипадок ${2:_}\n\t${3:базарь 1}\nрозібрали' },
+  { label: 'випадок', words: ['випадок'], kind: 'statement', detail: 'one arm of розбери', snippet: 'випадок ${1:_}' },
+  { label: 'розібрали', words: ['розібрали'], kind: 'statement', detail: 'close the match', snippet: 'розібрали' },
   { label: 'харе', words: ['харе'], kind: 'statement', detail: 'leave the innermost loop', snippet: 'харе' },
   { label: 'базарь', words: ['базарь'], kind: 'statement', detail: 'print a value',
     snippet: 'базарь ${1:0}' },
@@ -67,6 +73,14 @@ const ENTRIES = [
   { label: 'або', words: ['або'], kind: 'operator', detail: 'logical OR', snippet: 'або' },
   { label: 'склепай', words: ['склепай'], kind: 'keyword', detail: 'create an object', snippet: 'склепай ${1:Name}(${2})' },
   { label: 'ану кажи', words: ['ану', 'кажи'], kind: 'keyword', detail: 'read one integer', snippet: 'ану кажи' },
+  { label: 'всюди', words: ['всюди'], kind: 'keyword', detail: 'fill an array with one value', snippet: '[всюди ${1:0}]' },
+  { label: 'може', words: ['може'], kind: 'type', detail: 'optional value: шось(x) or нема', snippet: 'може ${1:дрібняк}' },
+  { label: 'вийде … або облом', dict: 'вийде', words: ['вийде'], kind: 'type', detail: 'result: вийшло(x) or облом(e)',
+    snippet: 'вийде ${1:дрібняк} або облом ${2:крупняк}' },
+  { label: 'шось', words: ['шось'], kind: 'constant', detail: 'a може value that holds x', snippet: 'шось(${1:0})' },
+  { label: 'нема', words: ['нема'], kind: 'constant', detail: 'a може value that holds nothing', snippet: 'нема' },
+  { label: 'вийшло', words: ['вийшло'], kind: 'constant', detail: 'a вийде value that holds a result', snippet: 'вийшло(${1:0})' },
+  { label: 'облом', words: ['облом'], kind: 'constant', detail: 'a вийде value that holds an error', snippet: 'облом(${1:0})' },
 ];
 
 const documentationCache = new Map();

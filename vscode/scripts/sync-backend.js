@@ -1,6 +1,6 @@
 'use strict';
 // Refresh generated backend/ with root lexer.py, parser.py, ast_nodes.py,
-// semantic.py, and the bridge. Generated copies are neither edited nor committed.
+// semantic.py, bazar_types.py, exhaustiveness.py, and the bridge. Generated copies are neither edited nor committed.
 const fs = require('fs');
 const path = require('path');
 
@@ -13,6 +13,8 @@ const sources = [
   path.join(repoRoot, 'parser.py'),
   path.join(repoRoot, 'ast_nodes.py'),
   path.join(repoRoot, 'semantic.py'),
+  path.join(repoRoot, 'bazar_types.py'),
+  path.join(repoRoot, 'exhaustiveness.py'),
   path.join(extensionRoot, 'bridge', 'bazar_bridge.py'),
 ];
 

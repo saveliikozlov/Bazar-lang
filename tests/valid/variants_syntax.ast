@@ -1,0 +1,73 @@
+ProgramNode line=2 column=1
+  FunctionNode line=2 column=1 name=ділення result=Result<i32, i64>
+    parameters:
+      ParameterNode line=2 column=32 name=а1 type=i32
+      ParameterNode line=2 column=61 name=б1 type=i32
+    body:
+      BlockNode line=3 column=5
+        IfNode line=3 column=5
+          condition:
+            BinaryNode line=3 column=33 operator=eq
+              left:
+                IdentifierNode line=3 column=29 name=б1
+              right:
+                IntegerNode line=3 column=44 value=0
+          then_body:
+            BlockNode line=4 column=9
+              ReturnNode line=4 column=9
+                value:
+                  VariantNode line=4 column=22 variant=err
+                    value:
+                      IntegerNode line=4 column=33 value=404
+          else_body: None
+        ReturnNode line=6 column=5
+          value:
+            VariantNode line=6 column=18 variant=ok
+              value:
+                BinaryNode line=6 column=35 operator=div
+                  left:
+                    IdentifierNode line=6 column=31 name=а1
+                  right:
+                    IdentifierNode line=6 column=53 name=б1
+  DeclarationNode line=8 column=1 name=з type=Option<Option<[i32; 2]>> mutable=false
+    initializer:
+      VariantNode line=8 column=70 variant=some
+        value:
+          VariantNode line=8 column=79 variant=none
+  DeclarationNode line=9 column=1 name=р type=Result<i32, i64> mutable=false
+    initializer:
+      CallNode line=9 column=91 name=ділення
+        arguments:
+          IntegerNode line=9 column=106 value=1
+          IntegerNode line=9 column=109 value=0
+  PrintNode line=10 column=1
+    value:
+      BinaryNode line=10 column=26 operator=or
+        left:
+          FieldAccessNode line=10 column=17 field=шось
+            object:
+              IdentifierNode line=10 column=14 name=з
+        right:
+          FieldAccessNode line=10 column=36 field=облом
+            object:
+              IdentifierNode line=10 column=33 name=р
+  PrintNode line=11 column=1
+    value:
+      BinaryNode line=11 column=28 operator=add
+        left:
+          BinaryNode line=11 column=18 operator=or
+            left:
+              IdentifierNode line=11 column=15 name=р
+            right:
+              IntegerNode line=11 column=25 value=0
+        right:
+          IntegerNode line=11 column=37 value=1
+  PrintNode line=12 column=1
+    value:
+      BinaryNode line=12 column=17 operator=eq
+        left:
+          IdentifierNode line=12 column=14 name=з
+        right:
+          VariantNode line=12 column=28 variant=some
+            value:
+              VariantNode line=12 column=37 variant=none

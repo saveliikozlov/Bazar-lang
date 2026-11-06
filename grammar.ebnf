@@ -8,7 +8,8 @@
 
    The grammar has two layers.
    1. The LEXICAL grammar below converts source bytes into keyword tokens,
-      IDENT, INTEGER, STRING, "(", ")", ",", ".", NEWLINE, and one EOF. Horizontal whitespace
+      IDENT, INTEGER, STRING, "(", ")", "[", "]", ",", ".", ";", "?", NEWLINE,
+      and one EOF. Horizontal whitespace
       and comments are skipped and never reach the parser.
    2. The SYNTACTIC grammar above that layer operates on the resulting tokens.
       A quoted Cyrillic word such as "зуб" denotes that exact keyword token.
@@ -64,6 +65,7 @@ statement = immutable_declaration
           | call_statement
           | if_statement
           | loop_statement
+          | match_statement
           | break_statement ;
 
 (* "зуб даю" declares an immutable variable: it is assigned exactly once,
@@ -75,15 +77,30 @@ mutable_declaration = "мутна", "тєма", IDENT, "тіпа", type, "це",
 
 (* дрібняк = i32, крупняк = i64, базар = bool. An IDENT names a structure
    declared with "такі діла"; the semantic stage checks that it exists. *)
-type = "дрібняк" | "крупняк" | "базар" | IDENT ;
+type = "дрібняк" | "крупняк" | "базар" | IDENT | array_type | option_type | result_type ;
 
-(* "перевзувся" assigns to an existing variable, or to a field reached
-   through a chain of field names: "перевзувся к.центр.х тепер 5". A place
-   never contains a call. *)
+(* A fixed-size array: the element type and the number of elements, which
+   is a constant expression like the initializer of "желєзобетонно". The
+   semantic stage evaluates it and checks that it is from 1 to 2147483647.
+   Elements may be arrays: [[дрібняк; 3]; 2] holds 2 arrays of 3. *)
+array_type = "[", type, ";", expression, "]" ;
+
+(* "може" ("maybe") holds a value of its type, шось(x), or nothing, нема.
+   "вийде … або облом …" ("it will work out, or a flop") holds a result,
+   вийшло(x), or an error, облом(e). Both nest: "може може дрібняк". *)
+option_type = "може", type ;
+result_type = "вийде", type, "або", "облом", type ;
+
+(* "перевзувся" assigns to an existing variable, or to a field or an array
+   element reached through a chain: "перевзувся к.центр.х тепер 5",
+   "перевзувся сітка[1][2] тепер 0". Only the indexes of a place may
+   contain a call. *)
 assignment = "перевзувся", place, "тепер", expression ;
-place = IDENT, { ".", IDENT } ;
+place = IDENT, { ".", IDENT | index } ;
 
-(* "базарь" prints a value or a string literal. *)
+(* "базарь" prints a value or a string literal. A string literal may hold
+   "{…}" parts, each one expression whose value is printed in its place:
+   "базарь \"Разом: {ціна на штук} грн\"". *)
 print_statement = "базарь", ( STRING | expression ) ;
 
 (* "всьо розходимось" exits with an expression result. It is optional and
@@ -94,8 +111,10 @@ exit_statement = "всьо", "розходимось", expression ;
 return_statement = "тримай", expression ;
 
 (* A call made for its effect stands on its own line. The chain must END
-   in a call: "п.посунь(1)" and "порахуй()" are statements, "п.х" is not. *)
-call_statement = IDENT, { [ arguments ], ".", IDENT }, arguments ;
+   in a call, which "?" may follow: "п.посунь(1)", "точки[0].посунь(1)",
+   "порахуй()" and "запиши(х)?" are statements, "п.х" and "точки[0]" are
+   not. *)
+call_statement = IDENT, { [ arguments ], { index | "?" }, ".", IDENT }, arguments, { "?" } ;
 
 (* "якшо реально" ... "отакої".
    The condition ends its line; "а нє" and "отакої" each occupy a separate
@@ -111,7 +130,7 @@ if_statement = "якшо", "реально", expression, NEWLINE,
 (* "крутимось" ("we keep spinning") opens a loop and "докрутились" ("we have
    spun enough") closes it on its own line. The body contains at least one
    statement. Each nested loop has its own closer. *)
-loop_statement = while_loop | for_loop ;
+loop_statement = while_loop | for_loop | for_each_loop ;
 
 (* "крутимось поки": the condition is evaluated before every pass. *)
 while_loop = "крутимось", "поки", expression, NEWLINE,
@@ -129,6 +148,49 @@ for_loop = "крутимось", IDENT, "тіпа", type,
 RANGE_FROM = ? an IDENT token whose text is exactly від ? ;
 RANGE_TO = ? an IDENT token whose text is exactly по ? ;
 
+(* An array loop: the counter takes the value of every element in turn. The
+   expression is evaluated once, before the first pass, and the loop walks
+   that value. EACH_FROM is the word "з", which, like "від" and "по", is not
+   reserved and is an ordinary name everywhere else. *)
+for_each_loop = "крутимось", IDENT, "тіпа", type, EACH_FROM, expression, NEWLINE,
+                block,
+                "докрутились" ;
+EACH_FROM = ? an IDENT token whose text is exactly з ? ;
+
+(* "розбери" ("sort it out") evaluates its value once and runs the body of
+   the first "випадок" ("case") whose pattern matches it; "розібрали"
+   ("sorted out") closes the match on its own line. Each arm header occupies
+   one line and its body is a block. The semantic stage requires the arms to
+   cover every value, each arm to match something no arm above it does, and
+   the patterns to fit the type of the value. *)
+match_statement = "розбери", expression, NEWLINE,
+                  { NEWLINE },
+                  arm, { arm },
+                  "розібрали" ;
+
+(* A guard, "якшо реально" and a базар, lets the arm run only when it is
+   true; an arm with a guard does not count toward covering every value. *)
+arm = "випадок", pattern, [ "якшо", "реально", expression ], NEWLINE, block ;
+
+(* Alternatives joined by "або" match when any one does; they bind no names. *)
+pattern = pattern_alternative, { "або", pattern_alternative } ;
+
+(* WILDCARD matches anything. Any other IDENT binds the matched value to a
+   new immutable name, visible in the guard and the body. IDENT followed by
+   "(" is a structure with one pattern per field, in field order. *)
+pattern_alternative = WILDCARD
+                    | IDENT
+                    | IDENT, "(", [ pattern, { ",", pattern } ], ")"
+                    | [ "мінус" ], SMALL_INTEGER
+                    | "мінус", I64_MIN_MAGNITUDE
+                    | boolean_literal
+                    | "шось", "(", pattern, ")"
+                    | "нема"
+                    | "вийшло", "(", pattern, ")"
+                    | "облом", "(", pattern, ")"
+                    | "(", pattern, ")" ;
+WILDCARD = ? an IDENT token whose text is exactly _ ? ;
+
 (* "харе" ("enough!") leaves the innermost loop. The grammar accepts it
    wherever a statement is; the semantic stage allows it only inside a loop. *)
 break_statement = "харе" ;
@@ -136,8 +198,8 @@ break_statement = "харе" ;
 (* A block is a nonempty sequence of statements. EVERY statement inside
    a block, including nested if_statement, ends with NEWLINE. Blank and
    comment-only lines may occur anywhere. A block ends when the parser sees
-   "а", "отакої", "порішали", or "докрутились" at line start. Indentation is
-   ignored as horizontal space. *)
+   "а", "отакої", "порішали", "докрутились", "випадок", or "розібрали" at
+   line start. Indentation is ignored as horizontal space. *)
 block = { NEWLINE },
         statement, NEWLINE,
         { NEWLINE | ( statement, NEWLINE ) } ;
@@ -187,7 +249,10 @@ arguments = "(", [ expression, { ",", expression } ], ")" ;
 
 expression = or_expression ;
 
-(* "або" is logical OR, left-associative. *)
+(* "або" is logical OR, left-associative. When its left operand is a "може"
+   or a "вийде", it is the fallback instead: the value held there, or the
+   right operand, which is evaluated only when nothing (нема) or an error
+   (облом) is held. The semantic stage tells the two apart by type. *)
 or_expression = and_expression, { "або", and_expression } ;
 
 (* "і ше" is logical AND, left-associative, binding more tightly than "або". *)
@@ -214,9 +279,13 @@ multiplicative = unary, { multiplicative_operator, unary } ;
 multiplicative_operator = "на" | "ділити", "на" ;
 
 (* Unary minus is right-associative: "мінус мінус x" means -(-x).
-   After an operand, "мінус" is the binary additive operator instead. *)
+   After an operand, "мінус" is the binary additive operator instead.
+   "?" binds more tightly than "мінус": "мінус з?" means -(з?). It
+   unwraps a "може" or a "вийде"; on нема or облом it leaves the function
+   with that value, or stops the main program. A chain takes its "?" as one
+   of its steps, so "м.перша()?.х" goes on after it. *)
 unary = "мінус", ( unary | I64_MIN_MAGNITUDE )
-      | primary ;
+      | primary, { "?" } ;
 
 (* Overflow check, second layer: I64_MIN_MAGNITUDE (9223372036854775808) is
    the magnitude of the smallest крупняк value, so it is accepted only as the
@@ -226,6 +295,8 @@ primary = SMALL_INTEGER
         | boolean_literal
         | read_expression
         | object_creation
+        | array_literal
+        | variant
         | chain
         | "(", expression, ")" ;
 
@@ -237,9 +308,32 @@ read_expression = "ану", "кажи" ;
    default may be left out: "склепай Точка()" uses every default. *)
 object_creation = "склепай", IDENT, arguments ;
 
-(* A name, optionally called, followed by any number of field accesses
-   and member calls: "х", "порахуй(1, 2)", "к.центр.х", "п.д2()". *)
-chain = IDENT, [ arguments ], { ".", IDENT, [ arguments ] } ;
+(* A name, optionally called, followed by any number of field accesses,
+   member calls, and indexes: "х", "порахуй(1, 2)", "к.центр.х", "п.д2()",
+   "сітка[1][2]", "точки[0].х". The field "розмір" of an array is its
+   length. *)
+chain = IDENT, [ arguments ], { ".", IDENT, [ arguments ] | ".", variant_check | index | "?" } ;
+
+(* "з.шось" and "з.нема" check what a "може" holds; "р.вийшло" and
+   "р.облом" check a "вийде". Each is a базар and takes no parentheses. *)
+variant_check = "шось" | "нема" | "вийшло" | "облом" ;
+
+(* One element of an array, counted from 0. *)
+index = "[", expression, "]" ;
+
+(* An array of the listed elements, at least one: "[1, 2, 3]". With
+   "всюди" ("everywhere") every element is the one value, evaluated once,
+   and the length comes from the array type expected there: a declaration,
+   an assignment, an argument, a result, or an element of a listed array. *)
+array_literal = "[", ( "всюди", expression | expression, { ",", expression } ), "]" ;
+
+(* The four values of "може" and "вийде". "шось(x)" alone is a "може" of
+   the type of x; "нема", "вийшло(x)", and "облом(e)" take their type from
+   the type expected there, like "[всюди x]". *)
+variant = "шось", "(", expression, ")"
+        | "нема"
+        | "вийшло", "(", expression, ")"
+        | "облом", "(", expression, ")" ;
 
 (* реально = true, гон = false *)
 boolean_literal = "реально" | "гон" ;
@@ -271,7 +365,7 @@ boolean_literal = "реально" | "гон" ;
 
 lexical_input = { horizontal_space | comment | NEWLINE | lexeme }, EOF ;
 
-lexeme = keyword | IDENT | INTEGER | STRING | "(" | ")" | "," | "." ;
+lexeme = keyword | IDENT | INTEGER | STRING | "(" | ")" | "[" | "]" | "," | "." | ";" | "?" ;
 
 (* ---- Separators ---- *)
 horizontal_space = SPACE | TAB ;
@@ -349,7 +443,10 @@ keyword = "желєзобетонно"
         | "плюс" | "мінус" | "на" | "ділити"
         | "маю" | "дєло" | "виході" | "тримай" | "порішали"
         | "такі" | "діла" | "склепай" | "ану" | "кажи"
-        | "крутимось" | "поки" | "докрутились" | "харе" ;
+        | "крутимось" | "поки" | "докрутились" | "харе"
+        | "всюди"
+        | "може" | "вийде" | "шось" | "нема" | "вийшло" | "облом"
+        | "розбери" | "випадок" | "розібрали" ;
 
 reserved_word = keyword | "чутки" ;
 
@@ -371,23 +468,37 @@ SMALL_INTEGER = ? digit, { digit } with value 0 … 9223372036854775807 ? ;
 I64_MIN_MAGNITUDE = ? digit, { digit } with value 9223372036854775808 ? ;
 
 (* ---- Punctuation ----
-   "," separates parameters and arguments; "." reaches a field or a member
-   function. Spaces may surround both: "п . х" is the same as "п.х". After
+   "," separates parameters, arguments, and array elements; "." reaches a
+   field or a member function; "[" and "]" write an array type, an array,
+   or an index; ";" separates the element type from the size in an array
+   type; "?" follows a value of "може" or "вийде". Spaces may surround any
+   of them: "п . х" is the same as "п.х". After
    digits, "." is a separate token, so "1.5" is a syntax error, not a
    number. *)
 
 (* ---- String literals ----
    A string literal occurs only as the operand of "базарь". It is written
    between double quotes on one line and may hold any Unicode scalar except
-   LF, CR, '"', and "\". Three escapes write LF, the quote, and the backslash:
-   "\n" is LF, '\"' is a double quote, "\\" is a backslash. A backslash
-   before any other character, a line end before the closing quote, and EOF
-   before it are lexical errors. *)
-STRING = '"', { string_char | escape }, '"' ;
+   LF, CR, '"', "\", "{", and "}". Five escapes write LF, the quote, the
+   backslash, and the braces: "\n" is LF, '\"' is a double quote, "\\" is a
+   backslash, "\{" and "\}" are braces. A backslash before any other
+   character, a line end before the closing quote, and EOF before it are
+   lexical errors.
+
+   An interpolation, "{" EXPR "}", holds one expression on the same line.
+   The lexer reads the text between the braces as its own run of tokens,
+   positioned where they stand, and the parser reads them as one
+   expression; "базарь" prints its value there. A quote, a "{", or a line
+   end before the closing "}", empty braces, and a "}" with no "{" are
+   lexical errors. *)
+STRING = '"', { string_char | escape | interpolation }, '"' ;
 string_char = ? any Unicode scalar (valid UTF-8 as defined above), except
-                U+000A LF, U+000D CR, U+0022 '"', and U+005C "\" ? ;
-escape = "\", ( "n" | '"' | "\" ) ;
+                U+000A LF, U+000D CR, U+0022 '"', U+005C "\", U+007B "{",
+                and U+007D "}" ? ;
+escape = "\", ( "n" | '"' | "\" | "{" | "}" ) ;
+interpolation = "{", ? the tokens of one expression, with no '"', "{",
+                  "}", LF, or CR among the characters ?, "}" ;
 
 (* Any other character outside comments and string literals produces a
-   lexical error, including "+", "-", "=", ";", ":", emoji, disallowed
+   lexical error, including "+", "-", "=", ":", "@", emoji, disallowed
    letters such as "é" or "Љ", and control characters. *)

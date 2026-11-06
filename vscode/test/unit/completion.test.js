@@ -63,7 +63,7 @@ test("declaration and condition snippets expand into valid programs", () => {
     .replace(/\\t|\t/g, '  ');
   for (const entry of ENTRIES.filter((e) => e.kind === 'statement')) {
     const program = expand(entry.snippet) + '\n';
-    if (['а нє', 'отакої', 'докрутились', 'порішали', 'тримай'].includes(entry.label)) continue; // closers and тримай are not standalone programs
+    if (['а нє', 'отакої', 'докрутились', 'порішали', 'тримай', 'випадок', 'розібрали'].includes(entry.label)) continue; // closers, arms, and тримай are not standalone programs
     if (entry.label === 'чутки:') continue;
     const out = execFileSync(python, ['-I', script], { input: JSON.stringify({ text: program }) }).toString();
     // A lone snippet such as «перевзувся name тепер 0» is valid syntax naming an undeclared variable.

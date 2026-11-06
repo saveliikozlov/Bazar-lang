@@ -10,7 +10,28 @@
       "patterns": [
         {
           "name": "constant.character.escape.bazar",
-          "match": "\\\\[n\"\\\\]"
+          "match": "\\\\[n\"\\\\{}]"
+        },
+        {
+          "name": "meta.interpolation.bazar",
+          "contentName": "source.bazar.embedded",
+          "begin": "\\{",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.section.interpolation.begin.bazar"
+            }
+          },
+          "end": "\\}|(?=\"|$)",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.interpolation.end.bazar"
+            }
+          },
+          "patterns": [
+            {
+              "include": "$self"
+            }
+          ]
         }
       ]
     },
@@ -52,6 +73,10 @@
       "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(?:якшо|отакої)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])"
     },
     {
+      "name": "keyword.control.match.bazar",
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(?:розбери|випадок|розібрали)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])"
+    },
+    {
       "begin": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(крутимось)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])",
       "beginCaptures": {
         "1": {
@@ -62,7 +87,7 @@
       "patterns": [
         {
           "name": "keyword.control.loop.bazar",
-          "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(?:від|по)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])"
+          "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(?:від|по|з)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])"
         },
         {
           "include": "$self"
@@ -143,7 +168,7 @@
     },
     {
       "name": "keyword.other.new.bazar",
-      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(?:склепай)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])"
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(?:склепай|всюди)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])"
     },
     {
       "name": "support.function.print.bazar",
@@ -155,7 +180,11 @@
     },
     {
       "name": "storage.type.bazar",
-      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(?:дрібняк|крупняк|базар)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])"
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(?:дрібняк|крупняк|базар|може|вийде)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])"
+    },
+    {
+      "name": "constant.language.variant.bazar",
+      "match": "(?<![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])(?:шось|нема|вийшло|облом)(?![A-Za-z0-9_ЁёА-яІіЇїЄєҐґ'ʼ])"
     },
     {
       "name": "constant.language.boolean.bazar",
@@ -222,8 +251,20 @@
       "match": "\\)"
     },
     {
+      "name": "punctuation.section.brackets.begin.bazar",
+      "match": "\\["
+    },
+    {
+      "name": "punctuation.section.brackets.end.bazar",
+      "match": "\\]"
+    },
+    {
       "name": "punctuation.separator.bazar",
-      "match": "[,.]"
+      "match": "[,.;]"
+    },
+    {
+      "name": "keyword.operator.try.bazar",
+      "match": "\\?"
     },
     {
       "name": "variable.other.bazar",

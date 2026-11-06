@@ -23,8 +23,8 @@ const hit = (line, character) => findAt(line, character);
 const idAt = (line, character) => { const h = hit(line, character); return h && h.entry.id; };
 const rangeAt = (line, character) => { const h = hit(line, character); return h && [h.start, h.end]; };
 
-test("grammar: all 46 keywords have individual dictionary entries", () => {
-  assert.strictEqual(KEYWORDS.length, 46);
+test("grammar: all 56 keywords have individual dictionary entries", () => {
+  assert.strictEqual(KEYWORDS.length, 56);
   for (const word of KEYWORDS) {
     const entry = getEntry(word);
     assert.ok(entry, `missing dictionary entry ${word}`);

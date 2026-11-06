@@ -1,0 +1,82 @@
+ProgramNode line=2 column=1
+  StructureNode line=2 column=1 name=Точка
+    fields:
+      FieldNode line=3 column=5 name=х type=i32 mutable=true index=0
+        default: None
+      FieldNode line=4 column=5 name=сусіди type=[i32; 2] mutable=true index=1
+        default: None
+    methods:
+      FunctionNode line=5 column=5 name=посунь result=i32
+        parameters:
+          ParameterNode line=5 column=34 name=д type=i32
+        body:
+          BlockNode line=6 column=9
+            AssignmentNode line=6 column=9 name=х
+              value:
+                BinaryNode line=6 column=47 operator=add
+                  left:
+                    IdentifierNode line=6 column=44 name=х
+                  right:
+                    IdentifierNode line=6 column=56 name=д
+            ReturnNode line=7 column=9
+              value:
+                IdentifierNode line=7 column=22 name=х
+  DeclarationNode line=10 column=1 name=точки type=[Точка; 2] mutable=true
+    initializer:
+      ArrayFillNode line=10 column=62
+        value:
+          NewObjectNode line=10 column=74 structure=Точка
+            arguments:
+              IntegerNode line=10 column=100 value=0
+              ArrayLiteralNode line=10 column=103
+                elements:
+                  IntegerNode line=10 column=104 value=1
+                  IntegerNode line=10 column=107 value=2
+  DeclarationNode line=11 column=1 name=к type=i32 mutable=true
+    initializer:
+      IntegerNode line=11 column=53 value=1
+  FieldAssignmentNode line=12 column=1
+    target:
+      IndexNode line=12 column=49
+        object:
+          FieldAccessNode line=12 column=37 field=сусіди
+            object:
+              IndexNode line=12 column=32
+                object:
+                  IdentifierNode line=12 column=22 name=точки
+                index:
+                  IdentifierNode line=12 column=33 name=к
+        index:
+          IntegerNode line=12 column=50 value=0
+    value:
+      BinaryNode line=12 column=81 operator=add
+        left:
+          FieldAccessNode line=12 column=78 field=х
+            object:
+              IndexNode line=12 column=74
+                object:
+                  IdentifierNode line=12 column=64 name=точки
+                index:
+                  IntegerNode line=12 column=75 value=0
+        right:
+          FieldAccessNode line=12 column=101 field=розмір
+            object:
+              IdentifierNode line=12 column=90 name=точки
+  CallStatementNode line=13 column=1 member_call=true
+    call:
+      MemberCallNode line=13 column=29 method=посунь
+        object:
+          IndexNode line=13 column=11
+            object:
+              IdentifierNode line=13 column=1 name=точки
+            index:
+              BinaryNode line=13 column=15 operator=sub
+                left:
+                  IdentifierNode line=13 column=12 name=к
+                right:
+                  IntegerNode line=13 column=26 value=1
+        arguments:
+          IntegerNode line=13 column=42 value=5
+  PrintNode line=14 column=1
+    value:
+      IdentifierNode line=14 column=14 name=точки

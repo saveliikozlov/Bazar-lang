@@ -1,4 +1,4 @@
-# Bazar («Базар») — language specification, version 0.3
+# Bazar («Базар») — language specification, version 0.8
 
 Bazar is a small imperative language whose keywords are Ukrainian/surzhyk
 phrases. Its motto means: *Bazar is a language where you answer for your words.*
@@ -8,7 +8,10 @@ block ends explicitly with `отакої`. Source files use `.bazar`.
 This document describes the lexer, parser, AST, and semantics. Version 0.3
 (Stage 2) adds functions, structures, member functions, `ану кажи`, string
 printing, and the auto constructor; the semantic pass enforces every rule,
-and the compiler generates LLVM IR. The full numbered rule list is in
+and the compiler generates LLVM IR. Version 0.4 adds fixed-size arrays, and
+version 0.5 the `може` (option) and `вийде` (result) types, version 0.6
+pattern matching with `розбери`, version 0.7 the `?` operator, and version
+0.8 string interpolation. The full numbered rule list is in
 [README.md](README.md#semantic-rules). The authoritative
 syntax is [grammar.ebnf](grammar.ebnf). Programs are in [examples/](examples)
 and explained in [EXAMPLES.md](EXAMPLES.md).
@@ -30,16 +33,26 @@ Each statement occupies one physical line. `якшо реально`, `маю д
 | `якшо реально EXPR` … `а нє` … `отакої` | condition with an optional else branch | `if e { … } else { … }` |
 | `крутимось поки EXPR` … `докрутились` | loop while a condition holds; literally we keep spinning | `while e { … }` |
 | `крутимось NAME тіпа TYPE від A по B` … `докрутились` | loop over an inclusive integer range | `for name in a..=b { … }` |
+| `крутимось NAME тіпа TYPE з EXPR` … `докрутились` | loop over the elements of an array | `for name in array { … }` |
 | `харе` | leave the innermost loop; literally enough | `break` |
+| `розбери EXPR` … `випадок PATTERN [якшо реально EXPR]` … `розібрали` | match against patterns, every value covered; literally sort it out … case … sorted out | `match e { p if g => … }` |
 | `перевзувся NAME.FIELD… тепер EXPR` | assignment to a field through a mutable chain | `o.f = e` |
+| `перевзувся NAME[I]… тепер EXPR` | assignment to an array element through a mutable chain | `a[i] = e` |
 | `тримай EXPR` | leave the function with a value; literally here, hold it | `return e` |
-| `NAME(ARGS)`, `OBJ.NAME(ARGS)` | a call on its own line | `f(a)`, `o.m(a)` |
+| `NAME(ARGS)`, `OBJ.NAME(ARGS)`, `ARR[I].NAME(ARGS)`, `NAME(ARGS)?` | a call on its own line, optionally passing on `нема` or `облом` | `f(a)`, `o.m(a)`, `a[i].m(b)`, `f(a)?` |
 | `маю дєло NAME(P тіпа T, …) на виході T` … `порішали` | function, top level; literally I have a business | `fn name(p: T) -> T { … }` |
 | `такі діла NAME` … `порішали` | structure with fields and member functions, top level | `struct Name { … }` |
 
 Expressions add calls `f(a, b)`, field access `o.f`, member calls `o.m(a)`,
 object creation `склепай T(a, b)`, and `ану кажи`, which reads one integer.
-`базарь` also prints a string literal `"…"` and an object.
+Arrays add literals `[a, b, c]`, filled arrays `[всюди x]` (literally
+everywhere), elements `м[і]`, and the length `м.розмір`. `може` and `вийде`
+add their values `шось(x)`, `нема`, `вийшло(x)`, and `облом(e)`, the checks
+`з.шось`, `з.нема`, `р.вийшло`, and `р.облом`, the fallback `з або x`, and
+`з?`, which is the value held, or returns `нема` or `облом` from the function.
+`базарь` also prints a string literal `"…"`, an object, an array, and those
+values. A string may hold `{EXPR}` parts, whose values are printed in their
+places: `базарь "Разом: {сума} грн"`; `\{` and `\}` write braces.
 
 ```text
 чутки: time to count the money
@@ -83,6 +96,9 @@ object creation `склепай T(a, b)`, and `ану кажи`, which reads one
 | `крупняк` | signed 64-bit integer | `i64` | −9223372036854775808 … 9223372036854775807 |
 | `базар` | Boolean | `bool` | `реально` (true) / `гон` (false) |
 | a `такі діла` name | object, copied as a value | the structure name | its fields |
+| `[TYPE; SIZE]` | fixed-size array, copied as a value | `[i32; 5]`, with SIZE as written | SIZE elements, SIZE from 1 to 2147483647 |
+| `може TYPE` | optional value, copied as a value | `Option<i32>` | `шось(x)` or `нема` |
+| `вийде TYPE або облом TYPE` | result or error, copied as a value | `Result<i32, i64>` | `вийшло(x)` or `облом(e)` |
 
 ## 3. Expressions
 
@@ -90,13 +106,13 @@ Operators are listed from **highest** to lowest precedence:
 
 | Level | Operators | Canonical operator | Associativity |
 | --- | --- | --- | --- |
-| 1 | literals, names, `( … )` | | |
+| 1 | literals, names, `( … )`, arrays `[…]`, `.` fields and calls, `м[і]` elements, `з?` | | |
 | 2 | `мінус x` (unary minus) | `neg` | right: `мінус мінус x` = `-(-x)` |
 | 3 | `на` (×), `ділити на` (÷) | `mul`, `div` | left |
 | 4 | `плюс` (+), `мінус` (−) | `add`, `sub` | left |
 | 5 | `рівно` (==), `не рівно` (!=), `більше` (>), `менше` (<) | `eq`, `ne`, `gt`, `lt` | **one per expression level; no chains** |
 | 6 | `і ше` (logical AND) | `and` | left |
-| 7 | `або` (logical OR) | `or` | left |
+| 7 | `або` (logical OR; after a `може` or `вийде`, the fallback) | `or` | left |
 
 ```text
 зуб даю відповідь тіпа дрібняк це 2 плюс 3 на 4             чутки: 2 + (3 * 4)
@@ -107,7 +123,7 @@ Operators are listed from **highest** to lowest precedence:
 
 - `a менше b менше c` is a **syntax error**. Write `a менше b і ше b менше c`
   or use parentheses, such as `(a менше b) рівно гон`.
-- There are no symbolic alternatives: `+ - * / == != < > = ! { } ;` produce
+- There are no symbolic alternatives: `+ - * / == != < > = ! { }` produce
   lexical errors outside comments.
 - A standalone `нє` is neither unary NOT nor an operator. Logical negation
   does not exist; `нє` occurs only in `а нє`.
@@ -136,7 +152,9 @@ Operators are listed from **highest** to lowest precedence:
   `желєзобетонно зуб даю мутна тєма тіпа це дрібняк крупняк базар перевзувся тепер базарь
   всьо розходимось якшо реально а нє отакої гон або і ше рівно не більше менше
   плюс мінус на ділити маю дєло виході тримай порішали такі діла склепай ану кажи
-  крутимось поки докрутились харе чутки`. `від` and `по` are not reserved.
+  крутимось поки докрутились харе всюди може вийде шось нема вийшло облом
+  розбери випадок розібрали чутки`. `від`, `по`, and `з` are not reserved, and
+  `_` is the wildcard only inside a pattern.
   `тіпа` is entirely Cyrillic: `тіпa` with a final Latin `a` is an identifier,
   rather than the keyword.
 - **Integers.** One or more decimal ASCII digits; leading zeros are allowed.
@@ -152,8 +170,11 @@ Operators are listed from **highest** to lowest precedence:
   including emoji. `чутки :` and bare `чутки` are errors. In `xчутки:`, the word
   is `xчутки`, so `:` is unexpected. A comment's ending newline still produces
   a NEWLINE token.
-- **Parentheses** `(` and `)` are the only punctuation. All other punctuation
-  outside comments produces a lexical error. There are no string literals.
+- **Punctuation** is `(`, `)`, `[`, `]`, `,`, `.`, `;`, and `?`. All other
+  punctuation outside comments and string literals produces a lexical error.
+  A string literal `"…"` may appear only as the operand of `базарь`. Inside
+  it, `\n`, `\"`, `\\`, `\{`, and `\}` are escapes, and `{` starts a part that
+  holds one expression on the same line, closed by `}`.
 
 ### Positions
 
@@ -231,21 +252,42 @@ ASTNode(line, column)
 │   ├── ExitNode(value)
 │   ├── ReturnNode(value)
 │   ├── CallStatementNode(call)            member_call flag
-│   ├── FieldAssignmentNode(target, value)
+│   ├── FieldAssignmentNode(target, value)    target: fields and indexes
+│   ├── ForEachNode(name, declared_type, array, body)
+│   ├── MatchNode(subject, arms)
 │   ├── FunctionNode(name, parameters, result_type, body)
 │   └── StructureNode(name, fields, methods)
+├── MatchArmNode(pattern, guard, body)       guard may be None
+├── PatternNode
+│   ├── WildcardPatternNode()              _
+│   ├── BindingPatternNode(name)
+│   ├── LiteralPatternNode(literal)        integer, мінус integer, реально, гон
+│   ├── VariantPatternNode(variant, inner) some none ok err; inner None for нема
+│   ├── StructurePatternNode(structure, fields)
+│   └── OrPatternNode(alternatives)
 ├── ParameterNode(name, declared_type)
 ├── FieldNode(name, declared_type, mutable, index, default)
+├── TypeNode
+│   ├── NamedTypeNode(name)                i32, i64, bool, or a structure name
+│   ├── ArrayTypeNode(element, size, size_text)
+│   ├── OptionTypeNode(inner)              може TYPE
+│   └── ResultTypeNode(ok, error)          вийде TYPE або облом TYPE
 └── ExprNode
     ├── IntegerNode(value)                 digits without leading zeros
     ├── BooleanNode(value)                 True / False
     ├── IdentifierNode(name)
     ├── StringNode(value)                  escapes resolved
+    ├── InterpolationNode(parts)           StringNode text and expressions, in order
     ├── ReadNode()                         ану кажи
     ├── CallNode(name, arguments)
     ├── FieldAccessNode(object, field)
     ├── MemberCallNode(object, method, arguments)
     ├── NewObjectNode(structure, arguments)
+    ├── IndexNode(object, index)           positioned at [
+    ├── ArrayLiteralNode(elements)
+    ├── ArrayFillNode(value)               [всюди value]
+    ├── VariantNode(variant, value)        some none ok err; value None for нема
+    ├── TryNode(operand)                   operand?, positioned at ?
     ├── UnaryNode(operator, operand)       operator = neg
     └── BinaryNode(operator, left, right)  add sub mul div eq ne gt lt and or
 ```
@@ -264,16 +306,22 @@ See [README.md](README.md#ast-dump-format) for the `compiler.py --ast` dump form
 
 ## 7. Implementation limits (not language rules)
 
-- Parentheses and conditions together may nest at most **100** levels.
-  Deeper input reports `compilation error: … Занадто глибоко закопався: понад 100
-  рівнів вкладеності (ліміт компілятора).` at the opening `(` or `якшо`, instead
+- Parentheses, brackets, and conditions together may nest at most **100**
+  levels. Deeper input reports `compilation error: … Занадто глибоко закопався: понад 100
+  рівнів вкладеності (ліміт компілятора).` at the opening `(`, `[`, or `якшо`, instead
   of overflowing Python's stack. Long flat chains (`1 плюс 1 плюс …`,
   `мінус мінус … x`) are parsed and printed without recursion or that limit.
   The dump is streamed line by line; its indentation still makes the output
   of a very deep chain grow quadratically.
 - The entire file is read into memory.
+- A value of 1 KiB or more, such as a large array, lives on the heap of the
+  running program, so its size is limited by memory, not by the stack. When
+  memory runs out, the program stops with a run-time error. One array value
+  takes at most 2^40 bytes (1 TiB); larger ones are compilation errors.
+  Deep recursion can still exhaust the stack.
 
 ## 8. Features absent from this version
 
-Loops, string variables, logical NOT, and floating-point numbers are not
-part of the grammar. Strings exist only as the operand of `базарь`.
+String variables, logical NOT, floating-point numbers, and arrays whose
+length is known only at run time are not part of the grammar. Strings exist
+only as the operand of `базарь`.

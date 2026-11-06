@@ -7,7 +7,8 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from lexer import (  # noqa: E402
-    COMMA, DOT, EOF, IDENT, INTEGER, KEYWORD, KEYWORDS, LPAREN, NEWLINE, NEWLINE_TEXT, RPAREN,
+    COMMA, DOT, EOF, IDENT, INTEGER, KEYWORD, KEYWORDS, LBRACKET, LPAREN, NEWLINE, NEWLINE_TEXT, RBRACKET,
+    RPAREN, SEMICOLON,
     STRING, LexError, Token, lex,
 )
 
@@ -15,7 +16,7 @@ NEW_KEYWORDS = ("желєзобетонно зуб даю мутна тєма т
                 "всьо розходимось якшо реально а нє отакої гон або і ше рівно не більше "
                 "менше плюс мінус на ділити "
                 "маю дєло виході тримай порішали такі діла склепай ану кажи "
-                "крутимось поки докрутились харе").split()
+                "крутимось поки докрутились харе всюди може вийде шось нема вийшло облом розбери випадок розібрали").split()
 
 # Former Russian vocabulary absent from the new keywords is deliberately
 # retained here to verify that these words are now ordinary identifiers.
@@ -224,11 +225,49 @@ class TokenTest(unittest.TestCase):
         self.assertEqual(lex(b"x12")[0], Token(IDENT, "x12", 1, 1))
 
     def test_rejects_other_characters(self):
-        for bad in "+-*/=!<>;:\"'{}[]\x00\x0b\x0c\x7f":
+        for bad in "+-*/=!<>:@\"'{}\x00\x0b\x0c\x7f":
             with self.subTest(bad=bad):
                 with self.assertRaises(LexError):
                     lex(bad.encode())
 
+
+
+class ArrayTokenTest(unittest.TestCase):
+    def test_brackets_and_semicolon(self):
+        self.assertEqual(kinds("[дрібняк; 5]".encode()), [LBRACKET, KEYWORD, SEMICOLON, INTEGER, RBRACKET, EOF])
+        self.assertEqual(kinds("м[0][к]".encode()), [IDENT, LBRACKET, INTEGER, RBRACKET, LBRACKET, IDENT, RBRACKET, EOF])
+        tokens = lex("[всюди 0]".encode())
+        self.assertEqual(tokens[1], Token(KEYWORD, "всюди", 1, 2))
+        self.assertEqual(tokens[3], Token(RBRACKET, "]", 1, 14))      # всюди is 10 bytes
+
+    def test_range_and_loop_words_stay_names(self):
+        self.assertEqual(kinds("з розмір".encode()), [IDENT, IDENT, EOF])
+
+
+class InterpolationTokenTest(unittest.TestCase):
+    def test_parts_hold_text_and_positioned_tokens(self):
+        token = lex('базарь "a {х плюс 1} b"'.encode())[1]
+        self.assertEqual(token.kind, STRING)
+        self.assertEqual(token.text, "a  b")
+        first, middle, last = token.parts
+        self.assertEqual(first, ("text", "a ", 1, 15))
+        kind, tokens, line, column = middle
+        self.assertEqual((kind, line, column), ("expression", 1, 18))
+        self.assertEqual([(t.kind, t.text, t.column) for t in tokens],
+                         [(IDENT, "х", 18), (KEYWORD, "плюс", 21), (INTEGER, "1", 30),
+                          ("rbrace", "}", 31), (EOF, "", 31)])
+        self.assertEqual(last, ("text", " b", 1, 32))
+
+    def test_escaped_braces_are_text(self):
+        token = lex('"\\{х\\}"'.encode())[0]
+        self.assertEqual((token.text, token.parts), ("{х}", ()))
+
+    def test_brace_errors_are_positioned(self):
+        for source, column in (('"х}"', 4), ('"{}"', 2), ('"{х"', 2), ('"{{х}}"', 3), ('"{х + 1}"', 6)):
+            with self.subTest(source=source):
+                with self.assertRaises(LexError) as context:
+                    lex(source.encode())
+                self.assertEqual(context.exception.column, column)
 
 
 class StageTwoTokenTest(unittest.TestCase):
@@ -243,7 +282,7 @@ class StageTwoTokenTest(unittest.TestCase):
         self.assertEqual(token, Token(STRING, 'а"б\\в\nг', 1, 14))
 
     def test_string_may_hold_any_scalar_but_line_end(self):
-        self.assertEqual(lex('"чутки: 😎 + - ; {}"'.encode())[0].text, "чутки: 😎 + - ; {}")
+        self.assertEqual(lex('"чутки: 😎 + - ; \\{\\}"'.encode())[0].text, "чутки: 😎 + - ; {}")
         self.assertEqual(lex(b'""')[0], Token(STRING, "", 1, 1))
 
     def test_string_errors(self):

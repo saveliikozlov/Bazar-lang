@@ -158,3 +158,69 @@ test("Stage 2: functions, structures, strings, and read", async () => {
   assert.deepStrictEqual(tokens.find(([text]) => text === '\\"'), ['\\"', 'constant.character.escape.bazar']);
   assert.strictEqual(tokens[tokens.length - 1][1], 'comment.line.bazar');
 });
+
+test("arrays: types, literals, всюди, indexes, and з only in a loop header", async () => {
+  const d = await scopes('мутна тєма м тіпа [дрібняк; 3] це [всюди 0]');
+  const at = (text, nth = 0) => d.filter(([t]) => t === text)[nth][1];
+  assert.strictEqual(at('['), 'punctuation.section.brackets.begin.bazar');
+  assert.strictEqual(at(']'), 'punctuation.section.brackets.end.bazar');
+  assert.strictEqual(at(';'), 'punctuation.separator.bazar');
+  assert.strictEqual(at('дрібняк'), 'storage.type.bazar');
+  assert.strictEqual(at('всюди'), 'keyword.other.new.bazar');
+  assert.strictEqual(at('3'), 'constant.numeric.integer.bazar');
+  const i = await map('базарь м[к].розмір');
+  assert.strictEqual(i['м'], 'variable.other.bazar');
+  assert.strictEqual(i['к'], 'variable.other.bazar');
+  const loop = await map('крутимось е тіпа дрібняк з м');
+  assert.strictEqual(loop['з'], 'keyword.control.loop.bazar');
+  // з is an ordinary name outside a loop header
+  assert.strictEqual((await map('базарь з'))['з'], 'variable.other.bazar');
+  assert.strictEqual((await map('всюдиб'))['всюдиб'], 'variable.other.bazar');
+});
+
+test("може and вийде: types, values, checks, and the fallback", async () => {
+  const t = await map('зуб даю р тіпа вийде дрібняк або облом крупняк це облом(404)');
+  assert.strictEqual(t['вийде'], 'storage.type.bazar');
+  assert.strictEqual(t['облом'], 'constant.language.variant.bazar');
+  assert.strictEqual(t['або'], 'keyword.operator.logical.bazar');
+  const v = await map('базарь шось(1) рівно нема або з.вийшло');
+  assert.strictEqual(v['шось'], 'constant.language.variant.bazar');
+  assert.strictEqual(v['нема'], 'constant.language.variant.bazar');
+  assert.strictEqual(v['вийшло'], 'constant.language.variant.bazar');
+  assert.strictEqual((await map('зуб даю з тіпа може дрібняк це нема'))['може'], 'storage.type.bazar');
+  assert.strictEqual((await map('базарь шосьб'))['шосьб'], 'variable.other.bazar');
+});
+
+test("розбери: match words, guards, and patterns", async () => {
+  const match = 'keyword.control.match.bazar';
+  assert.strictEqual((await map('розбери з'))['розбери'], match);
+  const arm = await map('випадок шось(х) якшо реально х більше 0');
+  assert.strictEqual(arm['випадок'], match);
+  assert.strictEqual(arm['шось'], 'constant.language.variant.bazar');
+  assert.strictEqual(arm['якшо'], 'keyword.control.conditional.bazar');
+  assert.strictEqual(arm['х'], 'variable.other.bazar');
+  assert.strictEqual((await map('розібрали'))['розібрали'], match);
+  assert.strictEqual((await map('розберика'))['розберика'], 'variable.other.bazar');
+});
+
+test("?: the propagation operator after calls, names, and chains", async () => {
+  const tokens = await scopes('тримай шось(м.перша()? плюс з??)');
+  const marks = tokens.filter(([text]) => text.includes('?'));
+  assert.ok(marks.length >= 2);
+  for (const [, scope] of marks) assert.strictEqual(scope, 'keyword.operator.try.bazar');
+  assert.ok((await scopes('базарь "чому?"')).every(([, scope]) => scope !== 'keyword.operator.try.bazar'));
+  assert.ok((await scopes('чутки: шо там?')).every(([, scope]) => scope !== 'keyword.operator.try.bazar'));
+});
+
+test("strings: {…} parts are code, \\{ and \\} are escapes", async () => {
+  const tokens = await scopes('базарь "Разом: {ціна плюс 1} грн \\{не код\\}"');
+  const scopeOf = (text) => tokens.find(([t]) => t === text)[1];
+  assert.strictEqual(scopeOf('Разом: '), 'string.quoted.double.bazar');
+  assert.strictEqual(scopeOf('{'), 'punctuation.section.interpolation.begin.bazar');
+  assert.strictEqual(scopeOf('ціна'), 'variable.other.bazar');
+  assert.strictEqual(scopeOf('плюс'), 'keyword.operator.arithmetic.bazar');
+  assert.strictEqual(scopeOf('}'), 'punctuation.section.interpolation.end.bazar');
+  assert.strictEqual(scopeOf('\\{'), 'constant.character.escape.bazar');
+  assert.strictEqual(scopeOf('\\}'), 'constant.character.escape.bazar');
+  assert.ok(tokens.some(([t, scope]) => t.includes('не код') && scope === 'string.quoted.double.bazar'));
+});

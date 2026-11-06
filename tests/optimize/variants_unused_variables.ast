@@ -1,0 +1,25 @@
+ProgramNode line=2 column=1
+  FunctionNode line=2 column=1 name=запасне result=i32
+    parameters: []
+    body:
+      BlockNode line=3 column=5
+        PrintNode line=3 column=5
+          value:
+            StringNode line=3 column=18 value="запасне"
+        ReturnNode line=4 column=5
+          value:
+            IntegerNode line=4 column=18 value=0
+  DeclarationNode line=6 column=1 name=з type=Option<i32> mutable=false
+    initializer:
+      VariantNode line=6 column=56 variant=none
+  DeclarationNode line=8 column=1 name=потрібне type=i32 mutable=false
+    initializer:
+      BinaryNode line=8 column=64 operator=or
+        left:
+          IdentifierNode line=8 column=61 name=з
+        right:
+          CallNode line=8 column=71 name=запасне
+            arguments: []
+  PrintNode line=10 column=1
+    value:
+      StringNode line=10 column=14 value="кінець"

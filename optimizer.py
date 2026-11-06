@@ -21,35 +21,18 @@ reports the same position.
 """
 
 from ast_nodes import (
-    AssignmentNode, ASTNode, BinaryNode, BlockNode, BooleanNode, CallNode, CallStatementNode,
-    DeclarationNode, ExitNode, FieldAccessNode, FieldAssignmentNode, ForNode, FunctionNode,
-    IdentifierNode, IfNode, IntegerNode, MemberCallNode, NewObjectNode, PrintNode, ReturnNode,
-    StructureNode, UnaryNode, WhileNode,
+    ArrayFillNode, ArrayLiteralNode, AssignmentNode, ASTNode, BinaryNode, BindingPatternNode, BlockNode,
+    BooleanNode, CallNode, CallStatementNode, DeclarationNode, ExitNode, FieldAccessNode, FieldAssignmentNode,
+    ForEachNode, ForNode, FunctionNode, IdentifierNode, IfNode, IndexNode, IntegerNode, InterpolationNode,
+    MatchNode, MemberCallNode, NewObjectNode, PrintNode, ReturnNode, StringNode, StructureNode, TryNode,
+    UnaryNode, VariantNode, WhileNode, walk,
 )
-from semantic import RANGES, VarInfo
+from semantic import VarInfo, constant_value
 
 ARITHMETIC = ("add", "sub", "mul", "div")
 
 
 # ---------------------------------------------------------------- tree walks
-
-def children(node):
-    """The direct child nodes of a node, whatever its class."""
-    for value in vars(node).values():
-        if isinstance(value, ASTNode):
-            yield value
-        elif isinstance(value, list):
-            yield from (item for item in value if isinstance(item, ASTNode))
-
-
-def walk(node):
-    """The node and everything below it."""
-    stack = [node]
-    while stack:
-        current = stack.pop()
-        yield current
-        stack.extend(children(current))
-
 
 def contains(node, target):
     return any(item is target for item in walk(node))
@@ -119,37 +102,6 @@ def remove_unused_functions(program, info):
 
 # ---------------------------------------------------------- unused variables
 
-def constant_value(node):
-    """The value of an integer expression known now, or None if it is unknown or overflows."""
-    if isinstance(node, IntegerNode):
-        return int(node.value)
-    if isinstance(node, IdentifierNode):
-        known = isinstance(node.ref, VarInfo) and node.ref.kind == "const"
-        return node.ref.value if known and node.ref.type in RANGES else None
-    if isinstance(node, UnaryNode):
-        operand = constant_value(node.operand)
-        value = None if operand is None else -operand
-    elif isinstance(node, BinaryNode) and node.operator in ARITHMETIC:
-        left, right = constant_value(node.left), constant_value(node.right)
-        if left is None or right is None or (node.operator == "div" and right == 0):
-            return None
-        if node.operator == "add":
-            value = left + right
-        elif node.operator == "sub":
-            value = left - right
-        elif node.operator == "mul":
-            value = left * right
-        else:
-            quotient = abs(left) // abs(right)
-            value = quotient if (left < 0) == (right < 0) else -quotient
-    else:
-        return None
-    if value is None:
-        return None
-    low, high = RANGES[node.type]
-    return value if low <= value <= high else None
-
-
 def can_drop(node):
     """Whether removing an expression cannot change what the program does.
 
@@ -160,8 +112,17 @@ def can_drop(node):
         return True
     if isinstance(node, FieldAccessNode):
         return can_drop(node.object)
+    if isinstance(node, IndexNode):
+        # An index the semantic pass knows is inside the array; any other may stop the program.
+        return can_drop(node.object) and node.index_value is not None
     if isinstance(node, NewObjectNode):
         return all(can_drop(argument) for argument in node.arguments)
+    if isinstance(node, ArrayLiteralNode):
+        return all(can_drop(item) for item in node.elements)
+    if isinstance(node, ArrayFillNode):
+        return can_drop(node.value)
+    if isinstance(node, VariantNode):
+        return node.value is None or can_drop(node.value)
     if isinstance(node, BinaryNode) and node.operator not in ARITHMETIC:
         return can_drop(node.left) and can_drop(node.right)
     if isinstance(node, (UnaryNode, BinaryNode)):
@@ -170,9 +131,21 @@ def can_drop(node):
 
 
 def place_root(node):
-    while isinstance(node, FieldAccessNode):
+    while isinstance(node, (FieldAccessNode, IndexNode)):
         node = node.object
     return node
+
+
+def place_chain(node):
+    """The steps of an assignment target down to its name, without its index expressions."""
+    while isinstance(node, (FieldAccessNode, IndexNode)):
+        yield node
+        node = node.object
+    yield node
+
+
+def place_indexes(node):
+    return [step.index for step in place_chain(node) if isinstance(step, IndexNode)]
 
 
 def removable_variables(program, info):
@@ -188,9 +161,10 @@ def removable_variables(program, info):
                 if not can_drop(item.value):
                     kept.add(item.ref)
             elif isinstance(item, FieldAssignmentNode):
-                # An assignment through п.х writes п; it does not read it.
-                read_places.update(id(place) for place in walk(item.target))
-                if not can_drop(item.value):
+                # An assignment through п.х or а[і] writes п or а; it does not read it.
+                # The index і is read, and it runs whenever the assignment does.
+                read_places.update(id(step) for step in place_chain(item.target))
+                if not (can_drop(item.value) and all(can_drop(index) for index in place_indexes(item.target))):
                     kept.add(place_root(item.target).ref)
     for code in code_of(program, info):
         for item in walk(code):
@@ -225,8 +199,12 @@ def can_inline(function):
     """The shape that is inlined: a top-level function that leaves only by its last line.
 
     A member function uses the fields of its object, and a тримай anywhere else
-    would need a jump out of the middle of the caller's code."""
+    would need a jump out of the middle of the caller's code. So would a ?, which
+    returns нема or облом from the function: moved into the caller, it would
+    leave the caller instead."""
     if function.owner is not None:
+        return False
+    if any(isinstance(item, TryNode) for item in walk(function.node.body)):
         return False
     statements = function.node.body.statements
     if not isinstance(statements[-1], ReturnNode):
@@ -271,6 +249,21 @@ def evaluated_parts(node):
         return [node.object] + node.arguments
     if isinstance(node, FieldAccessNode):
         return [node.object]
+    if isinstance(node, IndexNode):
+        return [node.object, node.index]
+    if isinstance(node, ArrayLiteralNode):
+        return node.elements
+    if isinstance(node, ArrayFillNode):
+        return [node.value]
+    if isinstance(node, VariantNode):
+        return [] if node.value is None else [node.value]
+    if isinstance(node, TryNode):
+        return [node.operand]
+    if isinstance(node, InterpolationNode):
+        # Each value is printed as soon as it runs, so only a call in the first
+        # value may run before the statement: a later one would print too early.
+        values = [part for part in node.parts if not isinstance(part, StringNode)]
+        return values[:1]
     return []
 
 
@@ -308,6 +301,10 @@ def statement_expressions(statement):
         return [statement.condition]
     if isinstance(statement, ForNode):
         return [statement.start, statement.end]
+    if isinstance(statement, ForEachNode):
+        return [statement.array]
+    if isinstance(statement, MatchNode):
+        return [statement.subject]
     return []
 
 
@@ -376,9 +373,11 @@ class Inliner:
         self.count += 1
         moved = []
         # Each parameter becomes a local declaration initialised with the argument.
-        for parameter, argument in zip(function.parameters, call.arguments):
+        # The new declarations reuse the type nodes of the function header: the
+        # function is removed once nobody calls it, so they have one owner again.
+        for parameter, syntax, argument in zip(function.parameters, function.node.parameters, call.arguments):
             parameter.kind = "immutable"
-            declaration = DeclarationNode(call.line, call.column, parameter.name, parameter.type,
+            declaration = DeclarationNode(call.line, call.column, parameter.name, syntax.declared_type,
                                           False, argument)
             declaration.info = parameter
             moved.append(declaration)
@@ -388,7 +387,7 @@ class Inliner:
         # The exit of the body becomes the value that stands where the call stood.
         exit_node = body[-1]
         result = VarInfo(self.renamed("результат", function), function.result, "immutable")
-        declaration = DeclarationNode(exit_node.line, exit_node.column, result.name, result.type,
+        declaration = DeclarationNode(exit_node.line, exit_node.column, result.name, function.node.result_type,
                                       False, exit_node.value)
         declaration.info = result
         moved.append(declaration)
@@ -408,7 +407,7 @@ class Inliner:
         owned = {declaration.info for declaration in parameters}
         for statement in body:
             for item in walk(statement):
-                if isinstance(item, (DeclarationNode, ForNode)):
+                if isinstance(item, (DeclarationNode, ForNode, ForEachNode, BindingPatternNode)):
                     owned.add(item.info)
         for info in owned:
             info.name = self.renamed(info.name, function)
@@ -416,7 +415,7 @@ class Inliner:
             declaration.name = declaration.info.name
         for statement in body:
             for item in walk(statement):
-                if isinstance(item, (DeclarationNode, ForNode)):
+                if isinstance(item, (DeclarationNode, ForNode, ForEachNode, BindingPatternNode)):
                     item.name = item.info.name
                 elif isinstance(item, (IdentifierNode, AssignmentNode)) and item.ref in owned:
                     item.name = item.ref.name

@@ -14,7 +14,9 @@ in source order directly beneath their parent.
 
 Stage 2 adds list labels (parameters, fields, methods, arguments): each
 item is printed one level below the label, and an empty list prints as
-label: []. Types print as i32, i64, bool, or the structure name.
+label: []. Types print as i32, i64, bool, or the structure name; an array
+type prints as [ELEMENT; SIZE], with its size as written in the source,
+може T as Option<T>, and вийде T або облом E as Result<T, E>.
 """
 
 from __future__ import annotations
@@ -83,6 +85,24 @@ class ASTNode:
             stack.extend(reversed(pending))
 
 
+def children(node):
+    """The direct child nodes of a node, whatever its class."""
+    for value in vars(node).values():
+        if isinstance(value, ASTNode):
+            yield value
+        elif isinstance(value, list):
+            yield from (item for item in value if isinstance(item, ASTNode))
+
+
+def walk(node):
+    """The node and everything below it."""
+    stack = [node]
+    while stack:
+        current = stack.pop()
+        yield current
+        stack.extend(children(current))
+
+
 def _flag(value):
     return "true" if value else "false"
 
@@ -90,6 +110,120 @@ def _flag(value):
 def _quote(text):
     """Show a string literal value with its escapes, as it is written in source."""
     return '"' + text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'
+
+
+# --------------------------------------------------------------- types
+
+@dataclass
+class TypeNode(ASTNode):
+    """Base class for a type as written in the source, positioned at its first token.
+
+    It prints on its owner's line as an attribute (type=i32), never as a child
+    node. The semantic pass turns it into a bazar_types.Type."""
+
+
+@dataclass
+class NamedTypeNode(TypeNode):
+    """A type named by one word: i32, i64, bool (canonical), or a structure name."""
+    name: str
+
+    def __str__(self):
+        return self.name
+
+
+@dataclass
+class ArrayTypeNode(TypeNode):
+    """[ELEMENT; SIZE]: SIZE is a constant expression; size_text is its source spelling."""
+    element: TypeNode
+    size: ExprNode
+    size_text: str
+
+    def __str__(self):
+        return f"[{self.element}; {self.size_text}]"
+
+
+@dataclass
+class OptionTypeNode(TypeNode):
+    """може TYPE: a value of TYPE or none."""
+    inner: TypeNode
+
+    def __str__(self):
+        return f"Option<{self.inner}>"
+
+
+@dataclass
+class ResultTypeNode(TypeNode):
+    """вийде TYPE або облом TYPE: a result or an error."""
+    ok: TypeNode
+    error: TypeNode
+
+    def __str__(self):
+        return f"Result<{self.ok}, {self.error}>"
+
+
+# ------------------------------------------------------------ patterns
+
+@dataclass
+class PatternNode(ASTNode):
+    """Base class for the patterns of випадок."""
+
+
+@dataclass
+class WildcardPatternNode(PatternNode):
+    """_: matches anything and binds nothing."""
+
+
+@dataclass
+class BindingPatternNode(PatternNode):
+    """A name: matches anything and binds the value to a new immutable variable."""
+    name: str
+
+    def attributes(self):
+        return (("name", self.name),)
+
+
+@dataclass
+class LiteralPatternNode(PatternNode):
+    """An integer, мінус and an integer, реально, or гон."""
+    literal: ExprNode
+
+    def labelled_children(self):
+        return (("literal", self.literal),)
+
+
+@dataclass
+class VariantPatternNode(PatternNode):
+    """шось(P), нема, вийшло(P), or облом(P); variant is some, none, ok, or err."""
+    variant: str
+    inner: PatternNode | None
+
+    def attributes(self):
+        return (("variant", self.variant),)
+
+    def labelled_children(self):
+        return () if self.inner is None else (("inner", self.inner),)
+
+
+@dataclass
+class StructurePatternNode(PatternNode):
+    """STRUCTURE(P, …): one pattern per field, in field order."""
+    structure: str
+    fields: list[PatternNode]
+
+    def attributes(self):
+        return (("structure", self.structure),)
+
+    def labelled_children(self):
+        return (("fields", self.fields),)
+
+
+@dataclass
+class OrPatternNode(PatternNode):
+    """P або P або …: matches when any alternative does; binds no names."""
+    alternatives: list[PatternNode]
+
+    def labelled_children(self):
+        return (("alternatives", self.alternatives),)
 
 
 # ------------------------------------------------------------- program
@@ -128,7 +262,7 @@ class BlockNode(ASTNode):
 class DeclarationNode(StmtNode):
     """Immutable зуб даю (mutable=false) or mutable мутна тєма (mutable=true)."""
     name: str
-    declared_type: str  # canonical: "i32", "i64", or "bool"
+    declared_type: TypeNode
     mutable: bool
     initializer: ExprNode
 
@@ -144,7 +278,7 @@ class DeclarationNode(StmtNode):
 class ConstantDeclarationNode(StmtNode):
     """Compile-time constant: желєзобетонно NAME тіпа TYPE це EXPR (top level only)."""
     name: str
-    declared_type: str  # canonical: "i32", "i64", or "bool"
+    declared_type: TypeNode
     initializer: ExprNode
 
     def attributes(self):
@@ -169,10 +303,10 @@ class AssignmentNode(StmtNode):
 
 @dataclass
 class FieldAssignmentNode(StmtNode):
-    """Assignment to a field: перевзувся NAME.FIELD{.FIELD} тепер EXPR.
+    """Assignment to a field or an element: перевзувся NAME.FIELD[INDEX]... тепер EXPR.
 
-    The target is a FieldAccessNode chain whose innermost object is an
-    IdentifierNode; it never contains a call."""
+    The target is a chain of FieldAccessNode and IndexNode whose innermost
+    object is an IdentifierNode; only its indexes may contain calls."""
     target: ExprNode
     value: ExprNode
 
@@ -206,7 +340,7 @@ class WhileNode(StmtNode):
 class ForNode(StmtNode):
     """Range loop syntax: крутимось NAME тіпа TYPE від EXPR по EXPR ... докрутились."""
     name: str
-    declared_type: str
+    declared_type: TypeNode
     start: ExprNode
     end: ExprNode
     body: BlockNode
@@ -216,6 +350,42 @@ class ForNode(StmtNode):
 
     def labelled_children(self):
         return (("start", self.start), ("end", self.end), ("body", self.body))
+
+
+@dataclass
+class ForEachNode(StmtNode):
+    """Array loop syntax: крутимось NAME тіпа TYPE з EXPR ... докрутились."""
+    name: str
+    declared_type: TypeNode
+    array: ExprNode
+    body: BlockNode
+
+    def attributes(self):
+        return (("name", self.name), ("type", self.declared_type))
+
+    def labelled_children(self):
+        return (("array", self.array), ("body", self.body))
+
+
+@dataclass
+class MatchNode(StmtNode):
+    """розбери EXPR, then one випадок per arm, closed by розібрали."""
+    subject: ExprNode
+    arms: list[MatchArmNode]
+
+    def labelled_children(self):
+        return (("subject", self.subject), ("arms", self.arms))
+
+
+@dataclass
+class MatchArmNode(ASTNode):
+    """випадок PATTERN [якшо реально GUARD] and its body; positioned at випадок."""
+    pattern: PatternNode
+    guard: ExprNode | None
+    body: BlockNode
+
+    def labelled_children(self):
+        return (("pattern", self.pattern), ("guard", self.guard), ("body", self.body))
 
 
 @dataclass
@@ -252,11 +422,14 @@ class ReturnNode(StmtNode):
 
 @dataclass
 class CallStatementNode(StmtNode):
-    """A call on its own line; call is a CallNode or a MemberCallNode."""
+    """A call on its own line; call is a CallNode or a MemberCallNode, maybe inside TryNode."""
     call: ExprNode
 
     def attributes(self):
-        return (("member_call", _flag(isinstance(self.call, MemberCallNode))),)
+        call = self.call
+        while isinstance(call, TryNode):           # запиши(х)? is still a call
+            call = call.operand
+        return (("member_call", _flag(isinstance(call, MemberCallNode))),)
 
     def labelled_children(self):
         return (("call", self.call),)
@@ -268,7 +441,7 @@ class CallStatementNode(StmtNode):
 class ParameterNode(ASTNode):
     """One parameter: NAME тіпа TYPE."""
     name: str
-    declared_type: str
+    declared_type: TypeNode
 
     def attributes(self):
         return (("name", self.name), ("type", self.declared_type))
@@ -281,7 +454,7 @@ class FunctionNode(StmtNode):
     At the top level it is a function; inside такі діла, a member function."""
     name: str
     parameters: list[ParameterNode]
-    result_type: str
+    result_type: TypeNode
     body: BlockNode
 
     def attributes(self):
@@ -298,7 +471,7 @@ class FieldNode(ASTNode):
     index is the position among the structure's fields, counting from 0.
     default is the constant expression after це, or None (auto constructor)."""
     name: str
-    declared_type: str
+    declared_type: TypeNode
     mutable: bool
     index: int
     default: ExprNode | None = None
@@ -368,6 +541,15 @@ class StringNode(ExprNode):
 
 
 @dataclass
+class InterpolationNode(ExprNode):
+    """A string literal with {EXPR} parts, printed by базарь: StringNode text and expressions, in order."""
+    parts: list[ExprNode]
+
+    def labelled_children(self):
+        return (("parts", self.parts),)
+
+
+@dataclass
 class ReadNode(ExprNode):
     """ану кажи: reads one integer from standard input."""
 
@@ -423,6 +605,59 @@ class NewObjectNode(ExprNode):
 
     def labelled_children(self):
         return (("arguments", self.arguments),)
+
+
+@dataclass
+class IndexNode(ExprNode):
+    """OBJECT[INDEX]: one element of an array; positioned at "["."""
+    object: ExprNode
+    index: ExprNode
+
+    def labelled_children(self):
+        return (("object", self.object), ("index", self.index))
+
+
+@dataclass
+class ArrayLiteralNode(ExprNode):
+    """[EXPR, EXPR, ...]: an array of the listed elements, at least one."""
+    elements: list[ExprNode]
+
+    def labelled_children(self):
+        return (("elements", self.elements),)
+
+
+@dataclass
+class ArrayFillNode(ExprNode):
+    """[всюди EXPR]: every element is EXPR; the length comes from the expected type."""
+    value: ExprNode
+
+    def labelled_children(self):
+        return (("value", self.value),)
+
+
+@dataclass
+class VariantNode(ExprNode):
+    """шось(EXPR), нема, вийшло(EXPR), or облом(EXPR); variant is some, none, ok, or err.
+
+    value is None for нема. Its type comes from context, except that шось(x)
+    alone is може of the type of x."""
+    variant: str
+    value: ExprNode | None
+
+    def attributes(self):
+        return (("variant", self.variant),)
+
+    def labelled_children(self):
+        return () if self.value is None else (("value", self.value),)
+
+
+@dataclass
+class TryNode(ExprNode):
+    """OPERAND?: what шось or вийшло holds; нема or облом leaves the function. Positioned at "?"."""
+    operand: ExprNode
+
+    def labelled_children(self):
+        return (("operand", self.operand),)
 
 
 @dataclass

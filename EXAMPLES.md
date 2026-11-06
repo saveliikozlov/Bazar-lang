@@ -215,3 +215,263 @@ Add the numbers from 1 to 10, stopping early once the counter passes 5:
 
 This prints `15`. See also [examples/loop_countdown.bazar](examples/loop_countdown.bazar)
 and [examples/loop_primes.bazar](examples/loop_primes.bazar).
+
+## Arrays — [examples/arrays.bazar](examples/arrays.bazar)
+
+Read the prices of five stalls, sort a copy, and add them up:
+
+```text
+желєзобетонно ЛОТКІВ тіпа дрібняк це 5
+
+маю дєло виручка(ціни тіпа [крупняк; ЛОТКІВ]) на виході крупняк
+    мутна тєма сума тіпа крупняк це 0
+    крутимось ціна тіпа крупняк з ціни
+        перевзувся сума тепер сума плюс ціна
+    докрутились
+    тримай сума
+порішали
+
+мутна тєма ціни тіпа [крупняк; ЛОТКІВ] це [всюди 0]
+крутимось к тіпа дрібняк від 0 по ЛОТКІВ мінус 1
+    перевзувся ціни[к] тепер ану кажи
+докрутились
+```
+
+The example file adds `відсортовані`, which takes the array by value, sorts
+its own copy, and returns it, so `ціни` keeps the order it was read in. With
+input `30 10 50 20 40` the program prints:
+
+```text
+[10, 20, 30, 40, 50]
+Найдешевше й найдорожче:
+10
+50
+Всьо, розходимось: 150
+```
+
+Common array errors, each reported when compiling:
+
+```text
+зуб даю м тіпа [дрібняк; 3] це [1, 2]
+```
+
+`[дрібняк; 2]` is not a `[дрібняк; 3]`: the length is part of the type.
+
+```text
+базарь [всюди 0]
+```
+
+`всюди` takes its length from the expected type, and nothing is expected here.
+
+```text
+зуб даю м тіпа [дрібняк; 3] це [1, 2, 3]
+базарь м[3]
+```
+
+An index known at compile time must be from 0 to 2. An index computed at run
+time is checked then, and the program stops with
+`помилка виконання: … номер за межами масиву: тут можна від 0 до 2`.
+
+## може and вийде — [examples/variants.bazar](examples/variants.bazar)
+
+Find the price of a stall, which may not exist, and split it between people,
+which fails for nobody:
+
+```text
+маю дєло на_кожного(сума тіпа крупняк, люди тіпа крупняк) на виході вийде крупняк або облом дрібняк
+    якшо реально люди менше 1
+        тримай облом(400)
+    отакої
+    тримай вийшло(сума ділити на люди)
+порішали
+```
+
+`ціна` in the example file returns `шось(ціна)` or `нема`, and the program
+continues with `знайдена або 0` and `частка або мінус 1`. With input `3 4` it
+prints `вийшло(300)` and `Всьо, розходимось: 300`; with input `5 0` it prints
+`Такого лотка нема`, `облом(400)`, and `Всьо, розходимось: -1`.
+
+Common errors, each reported when compiling:
+
+```text
+базарь нема
+```
+
+`нема` does not know which `може` it is: declare it with `тіпа`.
+
+```text
+зуб даю з тіпа може дрібняк це нема
+базарь з або гон
+```
+
+The fallback after `або` must have the type that `шось` holds, here `дрібняк`.
+
+```text
+зуб даю з тіпа може базар це шось(реально)
+якшо реально з
+    базарь 1
+отакої
+```
+
+A condition is a `базар`, not a `може базар`: write `якшо реально з або гон`
+or `якшо реально з.шось`.
+
+## розбери — [examples/match.bazar](examples/match.bazar)
+
+A till at the bazaar reads orders, a product number and a quantity, until
+product 0, and sorts out how each one ended:
+
+```text
+маю дєло рахунок(з тіпа Замовлення) на виході вийде крупняк або облом дрібняк
+    розбери з
+    випадок Замовлення(_, 0)
+        тримай облом(1)
+    випадок Замовлення(_, штук) якшо реально штук менше 0
+        тримай облом(2)
+    випадок Замовлення(товар, штук)
+        розбери ціна(товар)
+        випадок шось(за_штуку)
+            тримай вийшло(за_штуку на штук)
+        випадок нема
+            тримай облом(3)
+        розібрали
+    розібрали
+порішали
+```
+
+Every arm of both matches ends with `тримай`, so the function needs no
+`тримай` after them. With input `1 4 3 2 9 1 2 0 4 -1 0` the program prints:
+
+```text
+100
+200
+Такого товару нема
+Нуль штук — це не покупка
+Мінус штук? Не мути
+Всьо, розходимось: 300
+```
+
+Common errors, each reported when compiling:
+
+```text
+зуб даю з тіпа може дрібняк це нема
+розбери з
+випадок шось(х)
+    базарь х
+розібрали
+```
+
+`нема` has no arm: add `випадок нема` or `випадок _`.
+
+```text
+зуб даю н тіпа дрібняк це 1
+розбери н
+випадок _
+    базарь 0
+випадок 1
+    базарь 1
+розібрали
+```
+
+`випадок 1` never runs: `_` above it already matches everything.
+
+```text
+желєзобетонно МАКС тіпа дрібняк це 9
+зуб даю н тіпа дрібняк це 1
+розбери н
+випадок МАКС
+    базарь 0
+випадок _
+    базарь 1
+розібрали
+```
+
+A name in a pattern binds a new variable, even when a constant has that
+name, so `випадок МАКС` matches every value and `випадок _` never runs.
+
+## The ? operator — [examples/try.bazar](examples/try.bazar)
+
+Work out the change at a stall, where the price may be wrong and the money
+may be short:
+
+```text
+маю дєло здача(сплачено тіпа крупняк, ціна тіпа крупняк) на виході вийде крупняк або облом дрібняк
+    якшо реально сплачено менше перевірена(ціна)?
+        тримай облом(2)
+    отакої
+    тримай вийшло(сплачено мінус ціна)
+порішали
+```
+
+`перевірена(ціна)?` gives the price, or returns its `облом(1)` from `здача`
+before the comparison runs. The program sorts out the result with `розбери`
+and then ends with `всьо розходимось здача(гроші, ціна)?`. With input
+`100 30` it prints `70` and `Всьо, розходимось: 70`. With input `20 30` it
+prints `Грошей не вистачає`; then `?` in the main program gets `облом(2)` and
+stops the program with exit code 1, writing to stderr:
+
+```text
+помилка виконання: line 26:65: «?» отримав «облом» замість «вийшло»
+```
+
+Common errors, each reported when compiling:
+
+```text
+маю дєло ф(з тіпа може дрібняк) на виході дрібняк
+    тримай з?
+порішали
+```
+
+On `нема`, `з?` would return `нема` from `ф`, but `ф` returns a `дрібняк`.
+Use `з або 0`, or make `ф` return `може дрібняк`.
+
+```text
+маю дєло ф(р тіпа вийде дрібняк або облом дрібняк) на виході вийде дрібняк або облом крупняк
+    тримай вийшло(р?)
+порішали
+```
+
+The error types differ, `дрібняк` and `крупняк`, and `?` converts none.
+
+## String interpolation — [examples/interpolation.bazar](examples/interpolation.bazar)
+
+Print a receipt with the values inside the text:
+
+```text
+крутимось к тіпа дрібняк від 0 по ПОЗИЦІЙ мінус 1
+    зуб даю сума тіпа крупняк це ціни[к] на кількість[к]
+    якшо реально кількість[к] рівно 0
+        базарь "  #{к плюс 1}: не брали"
+    а нє
+        базарь "  #{к плюс 1}: {кількість[к]} × {ціни[к]} = {сума} грн"
+    отакої
+    перевзувся разом тепер разом плюс сума
+докрутились
+```
+
+The program prints:
+
+```text
+Чек на 3 позиції
+  #1: 4 × 25 = 100 грн
+  #2: не брали
+  #3: 2 × 100 = 200 грн
+Разом: 300 грн, знижка 10%
+До сплати: 270 грн
+Ціни: [25, 40, 100], а дужки пишуть так: { і }
+```
+
+Common errors, each reported when compiling:
+
+```text
+базарь "Разом: 3}"
+```
+
+A lone `}` in a string: write `\}` to print a brace.
+
+```text
+базарь "Разом: {1 + 2}"
+```
+
+Inside the braces is Bazar code, so `+` is an unknown character there too:
+write `{1 плюс 2}`.
